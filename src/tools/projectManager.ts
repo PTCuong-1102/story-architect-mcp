@@ -4,6 +4,138 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../server/StoryProject.js';
 
+// ─── Project Type Detection ───
+
+/** File markers nhận diện dự án code (KHÔNG phải tiểu thuyết). */
+const CODE_PROJECT_MARKERS = [
+  // Node.js / JavaScript / TypeScript
+  'package.json',
+  // Python
+  'pyproject.toml', 'setup.py', 'setup.cfg', 'Pipfile', 'requirements.txt',
+  // Rust
+  'Cargo.toml',
+  // Go
+  'go.mod',
+  // Java / Kotlin / Gradle / Maven
+  'pom.xml', 'build.gradle', 'build.gradle.kts',
+  // .NET / C#
+  '*.csproj', '*.sln',
+  // Ruby
+  'Gemfile',
+  // PHP
+  'composer.json',
+  // Dart / Flutter
+  'pubspec.yaml',
+  // Swift / Xcode
+  'Package.swift',
+  // Docker / CI/CD
+  'Dockerfile', 'docker-compose.yml', 'docker-compose.yaml',
+  // Terraform / IaC
+  'main.tf', 'terraform.tfvars',
+];
+
+/** Thư mục markers nhận diện dự án code. */
+const CODE_DIR_MARKERS = [
+  'src', 'lib', 'node_modules', '.git', '__pycache__', '.venv', 'venv',
+  'target', 'build', 'dist', '.next', '.nuxt',
+];
+
+/** Thư mục markers nhận diện dự án tiểu thuyết (story-architect). */
+const NOVEL_PROJECT_MARKERS = ['.story', 'manuscript', 'bible', 'outline', 'drafts_raw'];
+
+type ProjectType = 'novel' | 'code' | 'empty' | 'unknown';
+
+interface ProjectDetection {
+  type: ProjectType;
+  confidence: number;
+  novelSignals: string[];
+  codeSignals: string[];
+}
+
+/**
+ * Phát hiện loại dự án: tiểu thuyết, code, trống, hay không rõ.
+ */
+async function detectProjectType(dirPath: string): Promise<ProjectDetection> {
+  const novelSignals: string[] = [];
+  const codeSignals: string[] = [];
+
+  let entries: string[];
+  try {
+    entries = (await fs.readdir(dirPath)).map(e => e.toLowerCase());
+  } catch {
+    return { type: 'empty', confidence: 1.0, novelSignals: [], codeSignals: [] };
+  }
+
+  if (entries.length === 0) {
+    return { type: 'empty', confidence: 1.0, novelSignals: [], codeSignals: [] };
+  }
+
+  // Kiểm tra novel markers
+  for (const marker of NOVEL_PROJECT_MARKERS) {
+    if (entries.includes(marker)) {
+      novelSignals.push(marker);
+    }
+  }
+
+  // Kiểm tra code file markers
+  for (const marker of CODE_PROJECT_MARKERS) {
+    if (marker.startsWith('*')) {
+      // Glob pattern (e.g., *.csproj)
+      const ext = marker.slice(1);
+      if (entries.some(e => e.endsWith(ext))) {
+        codeSignals.push(marker);
+      }
+    } else {
+      if (entries.includes(marker.toLowerCase())) {
+        codeSignals.push(marker);
+      }
+    }
+  }
+
+  // Kiểm tra code dir markers (nhưng chỉ những thư mục đặc trưng cho code)
+  // Bỏ qua 'dist' và '.git' vì novel project cũng có thể có
+  const codeOnlyDirs = CODE_DIR_MARKERS.filter(d => d !== '.git');
+  for (const marker of codeOnlyDirs) {
+    if (entries.includes(marker)) {
+      // Kiểm tra thật sự là directory
+      try {
+        const stat = await fs.stat(path.join(dirPath, marker));
+        if (stat.isDirectory()) {
+          codeSignals.push(`${marker}/`);
+        }
+      } catch {
+        // Bỏ qua
+      }
+    }
+  }
+
+  // Quyết định type
+  const novelScore = novelSignals.length;
+  const codeScore = codeSignals.length;
+
+  // Nếu có .story/ → chắc chắn là novel (đã init bởi story-architect)
+  if (novelSignals.includes('.story')) {
+    return { type: 'novel', confidence: 1.0, novelSignals, codeSignals };
+  }
+
+  // Nếu có nhiều novel markers → likely novel
+  if (novelScore >= 2) {
+    return { type: 'novel', confidence: 0.8, novelSignals, codeSignals };
+  }
+
+  // Nếu có code markers rõ ràng và không có novel markers → code project
+  if (codeScore > 0 && novelScore === 0) {
+    return { type: 'code', confidence: Math.min(0.95, 0.5 + codeScore * 0.15), novelSignals, codeSignals };
+  }
+
+  // Có cả hai → ưu tiên novel nếu có novel signals
+  if (novelScore > 0 && codeScore > 0) {
+    return { type: 'novel', confidence: 0.6, novelSignals, codeSignals };
+  }
+
+  return { type: 'unknown', confidence: 0.5, novelSignals, codeSignals };
+}
+
 /**
  * Đăng ký tools quản lý dự án: set/get project path runtime.
  *
@@ -23,9 +155,10 @@ export function registerProjectManagerTools(
     'story_set_project',
     {
       title: 'Set Story Project Path',
-      description: 'Thiết lập hoặc chuyển đổi dự án tiểu thuyết đích. Cho phép thay đổi dự án mà không cần restart MCP server.',
+      description: 'Thiết lập hoặc chuyển đổi dự án tiểu thuyết đích. Tự động phát hiện và từ chối dự án code (Node.js, Python, Rust, v.v.) để tránh lãng phí tài nguyên. Dùng force=true để bỏ qua kiểm tra.',
       inputSchema: z.object({
         projectPath: z.string().describe('Đường dẫn đến thư mục dự án tiểu thuyết (tuyệt đối hoặc tương đối so với cwd)'),
+        force: z.boolean().default(false).describe('Bỏ qua kiểm tra loại dự án (dùng khi muốn khởi tạo dự án mới trong thư mục bất kỳ)'),
       }),
     },
     async (params) => {
@@ -47,6 +180,28 @@ export function registerProjectManagerTools(
           content: [{
             type: 'text' as const,
             text: `❌ Không tìm thấy thư mục: ${resolvedPath}\n\n💡 Hãy kiểm tra lại đường dẫn hoặc tạo thư mục trước.`,
+          }],
+        };
+      }
+
+      // ─── Phát hiện loại dự án ───
+      const detection = await detectProjectType(resolvedPath);
+
+      if (detection.type === 'code' && !params.force) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `🚫 Đây không phải dự án tiểu thuyết — đã phát hiện dự án code.
+
+📁 Đường dẫn: ${resolvedPath}
+🔍 Phát hiện: ${detection.codeSignals.join(', ')}
+📊 Confidence: ${Math.round(detection.confidence * 100)}%
+
+⚡ Story-architect-mcp chỉ dùng cho dự án tiểu thuyết / sáng tác.
+   Sử dụng trên dự án code sẽ lãng phí context window và gây nhầm lẫn cho AI.
+
+💡 Nếu đây thực sự là dự án tiểu thuyết, hãy gọi lại với force: true:
+   story_set_project({ projectPath: "${params.projectPath}", force: true })`,
           }],
         };
       }
@@ -76,14 +231,29 @@ export function registerProjectManagerTools(
         ? `\n🔄 Đã chuyển từ: ${previousPath}`
         : '';
 
+      // Cảnh báo nhẹ nếu force trên code project
+      const forceWarning = (detection.type === 'code' && params.force)
+        ? `\n\n⚠️ Đã bỏ qua kiểm tra: phát hiện markers code (${detection.codeSignals.join(', ')}). Hãy chắc chắn đây là dự án tiểu thuyết.`
+        : '';
+
+      // Thông tin detection cho unknown/empty
+      let detectionInfo = '';
+      if (detection.type === 'empty') {
+        detectionInfo = '\n📂 Thư mục trống — sẵn sàng khởi tạo dự án mới.';
+      } else if (detection.type === 'unknown') {
+        detectionInfo = '\n🔍 Không phát hiện markers rõ ràng. Đảm bảo đây là dự án tiểu thuyết.';
+      } else if (detection.type === 'novel' && detection.novelSignals.length > 0) {
+        detectionInfo = `\n✅ Phát hiện dự án tiểu thuyết: ${detection.novelSignals.join(', ')}`;
+      }
+
       return {
         content: [{
           type: 'text' as const,
           text: `✅ Đã thiết lập dự án: ${resolvedPath}
-${switchInfo}
+${switchInfo}${detectionInfo}
 
 📁 Trạng thái: ${isInitialized ? '✅ Đã khởi tạo' : '⚠️ Chưa khởi tạo — hãy gọi `story_init` để thiết lập'}
-${statusInfo}`,
+${statusInfo}${forceWarning}`,
         }],
       };
     }
