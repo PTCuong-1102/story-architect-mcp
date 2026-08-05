@@ -20,7 +20,7 @@ Writing long-form fiction (epics, thrillers, fantasy sagas, or multi-volume seri
 - **Plot Holes as Bugs / Lint Errors**: Active tracking of unresolved plot holes, broken timeline logic, and unfired foreshadowing setups.
 - **Synergy with `codebase-memory-mcp`**: Works seamlessly alongside knowledge-graph indexing servers to provide deep semantic graph queries across your entire story world.
 
-Built on the latest **Model Context Protocol (MCP)** specification with a **Stateless Architecture** (storing transparent state in `.story/`), `story-architect-mcp` provides **18 MCP Tools**, **6 Dynamic Resources**, and **5 Guided Workflow Prompts**.
+Built on the latest **Model Context Protocol (MCP)** specification with a **Stateless Architecture** (storing transparent state in `.story/`), `story-architect-mcp` provides **20 MCP Tools**, **6 Dynamic Resources**, and **5 Guided Workflow Prompts**.
 
 ---
 
@@ -112,6 +112,8 @@ npm run build
 
 Add `story-architect-mcp` to your MCP client configuration (e.g., Claude Desktop, Cursor, Antigravity, Windsurf).
 
+> **Note:** Bạn **không cần** truyền đường dẫn dự án qua args nữa. Sau khi server khởi động, AI agent sẽ tự động gọi tool `story_set_project` để trỏ đến dự án mong muốn.
+
 ### Claude Desktop (`claude_desktop_config.json`)
 
 ```json
@@ -119,7 +121,7 @@ Add `story-architect-mcp` to your MCP client configuration (e.g., Claude Desktop
   "mcpServers": {
     "story-architect": {
       "command": "npx",
-      "args": ["-y", "story-architect-mcp", "/path/to/your/novel-project"]
+      "args": ["-y", "story-architect-mcp"]
     }
   }
 }
@@ -132,20 +134,39 @@ Add `story-architect-mcp` to your MCP client configuration (e.g., Claude Desktop
   "mcpServers": {
     "story-architect": {
       "command": "node",
-      "args": ["/absolute/path/to/story-architect-mcp/dist/index.js", "/path/to/your/novel-project"]
+      "args": ["dist/index.js"]
     }
   }
 }
 ```
 
+### (Optional) Truyền đường dẫn mặc định qua CLI arg
+
+Nếu muốn, bạn vẫn có thể truyền đường dẫn dự án qua CLI arg để thiết lập mặc định khi server khởi động:
+
+```json
+{
+  "mcpServers": {
+    "story-architect": {
+      "command": "npx",
+      "args": ["-y", "story-architect-mcp", "/path/to/your/novel-project"]
+    }
+  }
+}
+```
+
+Dù đã truyền arg, bạn vẫn có thể chuyển sang dự án khác runtime bằng `story_set_project`.
+
 ---
 
 ## 🛠️ MCP Primitives Reference
 
-### 1. MCP Tools (18 Tools)
+### 1. MCP Tools (20 Tools)
 
 | Tool Name | Parameters | Description |
 |---|---|---|
+| `story_set_project` | `projectPath` | Sets or switches the target novel project directory at runtime. No server restart needed. |
+| `story_get_project_info` | *none* | Returns info about the currently targeted project (path, init status, word count, etc.). |
 | `story_init` | `template`, `title`, `author`, `genre`, `pov`, `tense` | Initializes project directory with template (`fantasy-epic`, `mystery-thriller`, `romance-modern`). |
 | `story_scan_messy_project` | `path` | Scans directory, detects encoding/similarity, and classifies unorganized files. |
 | `story_auto_refactor_structure` | `strategy`, `confirm` | Refactors messy project files into standard directory layout (supports dry-run). |
