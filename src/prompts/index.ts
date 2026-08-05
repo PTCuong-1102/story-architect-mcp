@@ -205,10 +205,12 @@ Trình bày kết quả dưới dạng bảng với mức độ nghiêm trọng.
       title: 'Rescue Project',
       description: 'Workflow từng bước giúp quét, phân loại, preview và tái cấu trúc thư mục lộn xộn',
       argsSchema: z.object({
-        projectPath: z.string().describe('Đường dẫn đến thư mục dự án lộn xộn'),
-      }),
+        projectPath: z.string().describe('Đường dẫn đến thư mục dự án lộn xộn').optional(),
+      }).optional().default({}),
     },
-    async ({ projectPath }) => {
+    async (args) => {
+      const project = getProject();
+      const projectPath = args?.projectPath || project.projectPath;
       return {
         messages: [{
           role: 'user' as const,
