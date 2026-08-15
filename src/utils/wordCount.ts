@@ -6,17 +6,18 @@ export function countWords(text: string): number {
   if (!text || text.trim().length === 0) return 0;
 
   // Loại bỏ Markdown headers, bold, italic, links, images
+  // Lưu ý: xử lý code block TRƯỚC khi bỏ ký tự backtick (nếu không sẽ phá fence)
   let cleaned = text
+    .replace(/```[\s\S]*?```/g, '')     // Code blocks
+    .replace(/`[^`]*`/g, '')           // Inline code
     .replace(/^#{1,6}\s+/gm, '')        // Headers
     .replace(/!\[.*?\]\(.*?\)/g, '')     // Images
     .replace(/\[([^\]]*)\]\(.*?\)/g, '$1') // Links → keep text
-    .replace(/[*_~`]/g, '')              // Bold, italic, strikethrough, code
+    .replace(/[*_~`]/g, '')              // Bold, italic, strikethrough
     .replace(/^>\s+/gm, '')             // Blockquotes
     .replace(/^[-*+]\s+/gm, '')         // Unordered lists
     .replace(/^\d+\.\s+/gm, '')         // Ordered lists
-    .replace(/---+/g, '')               // Horizontal rules
-    .replace(/```[\s\S]*?```/g, '')     // Code blocks
-    .replace(/`[^`]*`/g, '');           // Inline code
+    .replace(/---+/g, '');              // Horizontal rules
 
   // Split trên whitespace và lọc token rỗng
   const words = cleaned.split(/\s+/).filter(w => w.length > 0);

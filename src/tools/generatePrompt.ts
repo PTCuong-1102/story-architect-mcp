@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import * as path from 'node:path';
 import { StoryProject } from '../server/StoryProject.js';
-import { readTextFile } from '../utils/fileUtils.js';
+import { readTextFile, isSafePathSegment } from '../utils/fileUtils.js';
 
 export function registerGenerateWritingPromptTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -43,7 +43,10 @@ export function registerGenerateWritingPromptTool(server: McpServer, getProject:
 
       // Read outline
       const outlinePath = path.join(project.outlineDir, params.arc, `${params.chapter}_outline.md`);
-      const outline = await readTextFile(outlinePath) || '_Chưa có dàn ý cho chương này._';
+      const outline = isSafePathSegment(params.arc) && isSafePathSegment(params.chapter)
+        ? await readTextFile(outlinePath)
+        : null;
+      const outlineText = outline || '_Chưa có dàn ý cho chương này._';
 
       // Unfired setups
       const unfired = foreshadowing.items
@@ -84,7 +87,7 @@ ${unfired || '_Không có._'}
 ${previousContent || '_Chương đầu tiên._'}
 
 [DÀN Ý CHƯƠNG MỚI: ${params.chapter}]
-${outline}
+${outlineText}
 
 [YÊU CẦU THỰC THI]
 Chiến lược: ${params.strategy.toUpperCase()} (${strategyInstruction})

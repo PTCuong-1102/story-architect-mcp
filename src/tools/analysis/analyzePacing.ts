@@ -54,7 +54,7 @@ function analyzeChapterPacing(content: string): {
 
   const dialoguePercent = Math.round((dialogueLines / totalLines) * 100);
   const actionPercent = Math.round((actionLines / totalLines) * 100);
-  const descriptionPercent = 100 - dialoguePercent - actionPercent;
+  const descriptionPercent = Math.max(0, 100 - dialoguePercent - actionPercent);
 
   // Tension score (1-100)
   const tensionDensity = tensionHits / (totalWords / 100);
@@ -75,8 +75,8 @@ function analyzeChapterPacing(content: string): {
 
   return {
     dialoguePercent,
-    actionPercent: Math.max(0, descriptionPercent < 0 ? actionPercent + descriptionPercent : actionPercent),
-    descriptionPercent: Math.max(0, descriptionPercent),
+    actionPercent,
+    descriptionPercent,
     tensionScore,
     beats,
   };

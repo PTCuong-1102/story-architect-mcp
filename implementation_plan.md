@@ -2,7 +2,7 @@
 
 ## Bối cảnh
 
-Xây dựng MCP Server TypeScript cho phép AI Agent hỗ trợ viết tiểu thuyết dài: quản lý cấu trúc dự án, nhân vật, cốt truyện, timeline, và tích hợp với `codebase-memory-mcp`.
+Xây dựng MCP Server TypeScript cho phép AI Agent hỗ trợ viết tiểu thuyết dài: quản lý cấu trúc dự án, nhân vật, cốt truyện, timeline, và xây dựng Knowledge Graph nội bộ (`.cbm/index.json`) phục vụ truy vấn ngữ cảnh.
 
 Dự án hiện chỉ có file `plan.md`. Cần xây dựng toàn bộ từ đầu.
 
@@ -88,7 +88,7 @@ Expose dữ liệu read-only qua MCP Resource protocol:
 - **`story_stats`**: Thống kê word count, tiến độ, tốc độ viết
 
 #### [NEW] [src/tools/management/foreshadowing.ts](file:///home/ptcuong/Projects/story-architect-mcp/src/tools/management/foreshadowing.ts)
-- **`story_track_foreshadowing`**: Log setup/payoff, cảnh báo Chekhov's gun chưa bắn
+- **`story_log_setup` / `story_log_payoff` / `story_list_unfired`**: Log setup/payoff, cảnh báo Chekhov's gun chưa bắn
 
 ---
 
@@ -98,7 +98,7 @@ Expose dữ liệu read-only qua MCP Resource protocol:
 - **`story_init`**: Khởi tạo dự án tiểu thuyết mới với cấu trúc thư mục chuẩn
 
 #### [NEW] [src/tools/export.ts](file:///home/ptcuong/Projects/story-architect-mcp/src/tools/export.ts)
-- **`story_export`**: Xuất bản thảo thành markdown đơn, có mục lục
+- **`story_export`**: Xuất bản thảo thành markdown đơn / HTML / EPUB / DOCX (có mục lục); PDF qua gợi ý print-to-PDF
 
 ---
 
@@ -139,10 +139,20 @@ story-architect-mcp/
 │   │   └── management/
 │   │       ├── plotHoles.ts             # story_log_plot_hole / story_resolve_plot_hole
 │   │       ├── stats.ts                # story_stats
-│   │       └── foreshadowing.ts        # story_track_foreshadowing
+│   │       └── foreshadowing.ts        # story_log_setup / payoff / list_unfired
 │   └── utils/
 │       ├── fileUtils.ts                 # File I/O helpers
-│       └── wordCount.ts                # Word counting
+│       ├── wordCount.ts                # Word counting
+│       ├── zip.ts                      # ZIP packaging (EPUB/DOCX)
+│       ├── markdownToHtml.ts           # Markdown → HTML rendering
+│       └── knowledgeGraph.ts           # Knowledge Graph index & search
+├── test/                                # Unit tests (tsx --test)
+│   ├── wordCount.test.ts
+│   ├── fileUtils.test.ts
+│   ├── markdownHtml.test.ts
+│   ├── zip.test.ts
+│   ├── storyProject.test.ts
+│   └── knowledgeGraph.test.ts
 ```
 
 ## Verification Plan
@@ -150,6 +160,7 @@ story-architect-mcp/
 ### Automated Tests
 ```bash
 npm run build    # TypeScript compilation
+npm test         # Unit tests (node:test via tsx)
 npx mcp-inspector # Test tools/resources interactively (nếu có)
 ```
 

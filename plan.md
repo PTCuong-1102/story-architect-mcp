@@ -26,7 +26,8 @@
 
 ```text
 my-epic-novel/
-├── .cbm/                        # Cache/Index của codebase-memory-mcp
+├── .cbm/                        # Knowledge Graph index cache (tự build nội bộ)
+│   └── index.json               # Entity/relationship index cho story_query_context
 ├── .story/                      # Metadata & State của story-architect-mcp
 │   ├── config.json              # Cấu hình dự án (Tên, Tác giả, Thể loại, POV, Tense...)
 │   ├── status.json              # Trạng thái dự án, tiến độ, word count
@@ -35,7 +36,6 @@ my-epic-novel/
 │   ├── relationships.json       # Graph quan hệ nhân vật theo thời gian
 │   ├── foreshadowing.json       # Chekhov's gun tracker (Setups & Payoffs)
 │   ├── style_guide.json           # Quy chuẩn giọng văn (Voice & Style reference)
-│   ├── writing_log.json           # Lịch sử viết & tốc độ viết (Writing velocity)
 │   └── snapshots/               # Lịch sử phiên bản (Revision history / Rollback)
 ├── bible/                       # Kinh thánh tiểu thuyết (Lore & Bible)
 │   ├── characters/              # Hồ sơ nhân vật (Main, Side, Background)
@@ -106,10 +106,10 @@ Tất cả các tool thực thi có tác động làm thay đổi dữ liệu (s
 #### Nhóm 2: Nhóm Tích hợp Đồ thị Trí nhớ & Quan hệ (Memory & Graph)
 4. **`story_extract_entities_to_bible`**
    * *Input:* `chapter_path`, `confirm: boolean`.
-   * *Task:* Phân tích văn bản chương, tự động đề xuất/tạo các file Markdown nhân vật/địa danh trong `bible/` với định dạng YAML frontmatter chuẩn hóa cho `codebase-memory-mcp`.
+   * *Task:* Phân tích văn bản chương, tự động đề xuất/tạo các file Markdown nhân vật/địa danh trong `bible/` với định dạng YAML frontmatter chuẩn hóa cho hệ thống Knowledge Graph nội bộ.
 5. **`story_query_context`**
-   * *Input:* `query`, `budget_tokens?`.
-   * *Task:* Kết hợp thông tin Đồ thị quan hệ từ `codebase-memory-mcp` + Vector search để trích xuất Context Budget tối ưu nhất cho lượt viết tiếp theo.
+   * *Input:* `query`, `budget_tokens?`, `max_depth?`, `rebuild_index?`.
+   * *Task:* Kết hợp thông tin Đồ thị quan hệ từ Knowledge Graph nội bộ (cache `.cbm/index.json`) + BFS mở rộng thực thể để trích xuất Context Budget tối ưu nhất cho lượt viết tiếp theo.
 6. **`story_map_relationships`**
    * *Input:* `chapter_range?`.
    * *Task:* Phân tích và xây dựng Đồ thị quan hệ giữa các nhân vật (bạn bè, kẻ thù, đồng minh...) theo tiến trình câu chuyện, lưu vào `.story/relationships.json`.
@@ -123,8 +123,8 @@ Tất cả các tool thực thi có tác động làm thay đổi dữ liệu (s
 9. **`story_analyze_voice`**
    * *Input:* `chapter_range`, `sample_chapters?`.
    * *Task:* Phân tích giọng văn (độ dài câu, vốn từ, POV, Tense, nhịp điệu thoại) và kiểm tra hiện tượng trôi văn phong (Voice drift) so với `style_guide.json`.
-10. **`story_track_foreshadowing`** (Chekhov's Gun Tracker)
-    * *Task:* Đánh dấu chi tiết cài cắm (`story_log_setup`), chi tiết giải gỡ (`story_log_payoff`), và cảnh báo các "khẩu súng Chekhov chưa bắn" (Unfired Chekhov's guns).
+10. **`story_log_setup` / `story_log_payoff` / `story_list_unfired`** (Chekhov's Gun Tracker)
+    * *Task:* Đánh dấu chi tiết cài cắm (`story_log_setup`), chi tiết giải gỡ (`story_log_payoff`), và liệt kê các "khẩu súng Chekhov chưa bắn" (Unfired Chekhov's guns) lưu trong `.story/foreshadowing.json`.
 
 #### Nhóm 4: Nhóm Hỗ trợ Sáng tác, Quản lý & Xuất bản (Continuation, Management & Export)
 11. **`story_generate_writing_prompt`**
@@ -135,8 +135,10 @@ Tất cả các tool thực thi có tác động làm thay đổi dữ liệu (s
 13. **`story_stats`**
     * *Task:* Thống kê tổng số từ (word count), tốc độ viết (writing velocity), phần trăm hoàn thành mục tiêu.
 14. **`story_export`**
-    * *Input:* `format` (`markdown_single` | `epub` | `pdf` | `docx`), `options?`.
-    * *Task:* Đóng gói và xuất bản toàn bộ tác phẩm thành file hoàn chỉnh kèm mục lịch và thông tin tác giả.
+    * *Input:* `format` (`markdown_single` | `html` | `epub` | `docx`), `options?`. (`pdf` trả về gợi ý xuất qua `html` + print-to-PDF.)
+    * *Task:* Đóng gói và xuất bản toàn bộ tác phẩm thành file hoàn chỉnh kèm mục lục và thông tin tác giả.
+
+> Ghi chú: Đây là danh sách các tool cốt lõi; server thực tế đăng ký **21 tool** (bao gồm `story_init`, `story_set_project`, `story_get_project_info`, `story_scan_messy_project`, `story_snapshot`, `story_rollback`...).
 
 ---
 
@@ -168,8 +170,8 @@ gantt
 ### Chi tiết các Phase:
 * **Phase 1 (Tuần 1-2): Core Infra & MCP Resources**: Thiết lập MCP Server TypeScript (Stateless), cài đặt Resources (`story://status`, `story://config`...), Prompts cơ bản, và hệ thống Snapshot.
 * **Phase 2 (Tuần 3-4): Rescue Tools & Dry-run**: Phát triển `story_scan_messy_project`, `story_auto_refactor_structure` tích hợp Dry-run và Rollback protocol.
-* **Phase 3 (Tuần 4-6): Memory Integration & Relationship Graph**: Kết nối `codebase-memory-mcp`, hoàn thiện `story_extract_entities_to_bible`, `story_query_context` và `story_map_relationships`.
-* **Phase 4 (Tuần 6-8): Suite Phân Tích Chuyên Sâu**: Xây dựng `story_detect_timeline_conflicts` (Mermaid Gantt), `story_analyze_pacing`, `story_analyze_voice`, và `story_track_foreshadowing`.
+* **Phase 3 (Tuần 4-6): Memory Integration & Relationship Graph**: Xây dựng Knowledge Graph nội bộ (`.cbm/index.json`), hoàn thiện `story_extract_entities_to_bible`, `story_query_context` và `story_map_relationships`.
+* **Phase 4 (Tuần 6-8): Suite Phân Tích Chuyên Sâu**: Xây dựng `story_detect_timeline_conflicts` (Mermaid Gantt), `story_analyze_pacing`, `story_analyze_voice`, và `story_log_setup`/`story_log_payoff`/`story_list_unfired`.
 * **Phase 5 (Tuần 8-9): Export, Stats & Tuning**: Hoàn thiện `story_export`, `story_stats`, gọt giũa prompt generator và thử nghiệm trên tiểu thuyết thực tế.
 
 ---
@@ -181,5 +183,5 @@ gantt
 3. **AI Agent gọi `story_auto_refactor_structure(confirm=false)`**: Hiển thị bảng Preview danh sách file sẽ được cấu trúc lại vào `manuscript/` và `bible/`.
 4. **User đồng ý** $\rightarrow$ Agent gọi `story_auto_refactor_structure(confirm=true)`. Hệ thống tự động snapshot trước khi di chuyển file.
 5. **Client subscribe Resource `story://status`**: Trạng thái cấu trúc mới lập tức cập nhật lên Dashboard.
-6. **`codebase-memory-mcp` tiến hành Index**: Xây dựng Knowledge Graph.
+6. **`story_query_context` tự build Knowledge Graph nội bộ**: Xây dựng index `.cbm/index.json` cho tìm kiếm ngữ nghĩa và BFS mở rộng quan hệ.
 7. **User kích hoạt Prompt:** `/write-next-chapter` $\rightarrow$ Agent tự động tổng hợp Lore từ Resources, check Chekhov's Gun chưa payoff, lấy Style guide và tạo câu chữ nối tiếp mạch câu chuyện một cách mượt mà nhất.

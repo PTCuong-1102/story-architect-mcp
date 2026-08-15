@@ -72,7 +72,7 @@ registerResources(server, getProject);
 // ─── Register Prompts ───
 registerPrompts(server, getProject);
 
-// ─── Register Tools (20 Tools total) ───
+// ─── Register Tools (21 Tools total) ───
 
 // Project Management (must be first — enables all other tools)
 registerProjectManagerTools(server, setProject, () => currentProject, getCurrentPath);
@@ -101,7 +101,7 @@ registerGenerateWritingPromptTool(server, getProject);
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`[story-architect-mcp] Server started with 20 tools, 6 static resources, 3 templates, and 5 prompts.`);
+  console.error(`[story-architect-mcp] Server started with 21 tools, 6 static resources, 3 templates, and 5 prompts.`);
   if (initialPath) {
     console.error(`[story-architect-mcp] Initial Project Path: ${path.resolve(initialPath)}`);
   } else {

@@ -7,11 +7,9 @@
   "bin": {
     "story-architect-mcp": "dist/index.js"
   },
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "start": "node dist/index.js",
-    "prepare": "npm run build"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PTCuong-1102/story-architect-mcp.git"
   },
   "keywords": [
     "mcp",
@@ -19,6 +17,16 @@
     "writing",
     "story",
     "ai"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "tsx --test test/*.test.ts",
+    "prepare": "npm run build"
+  },
+  "files": [
+    "dist"
   ],
   "license": "MIT",
   "engines": {

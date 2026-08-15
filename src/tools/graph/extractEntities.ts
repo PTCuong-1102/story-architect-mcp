@@ -196,7 +196,7 @@ _Mô tả địa danh / bối cảnh ${loc}._
 - Nhân vật mới đã tạo: ${createdChars} trong \`bible/characters/\`
 - Bối cảnh mới đã tạo: ${createdWorld} trong \`bible/world/\`
 
-💡 Các file Markdown đều chứa YAML frontmatter chuẩn hóa cho \`codebase-memory-mcp\`.`,
+💡 Các file Markdown đều chứa YAML frontmatter chuẩn hóa cho hệ thống Knowledge Graph nội bộ.`,
         }],
       };
     }

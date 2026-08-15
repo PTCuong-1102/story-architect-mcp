@@ -6,6 +6,80 @@ import { StoryProject } from '../../server/StoryProject.js';
 import { exists, copyDir, generateId, readJsonFile, writeJsonFile } from '../../utils/fileUtils.js';
 import type { SnapshotsIndex, Snapshot } from '../../server/types.js';
 
+/**
+ * Tạo snapshot dùng chung cho dự án (được story_snapshot và các tool
+ * destructive khác — ví dụ story_auto_refactor_structure — sử dụng).
+ * Sao lưu metadata .story/, manuscript/ và bible/ vào .story/snapshots/{id}/.
+ */
+export async function createSnapshot(
+  project: StoryProject,
+  label: string,
+  description = ''
+): Promise<Snapshot & { snapshotDir: string }> {
+  const snapshotsDir = project.getSnapshotsDir();
+  await fs.mkdir(snapshotsDir, { recursive: true });
+
+  const snapshotId = generateId();
+  const snapshotDir = path.join(snapshotsDir, snapshotId);
+
+  const storyDir = project.storyDir;
+  await fs.mkdir(path.join(snapshotDir, '.story'), { recursive: true });
+
+  const metaFiles = ['config.json', 'status.json', 'timeline.json',
+    'unresolved_holes.json', 'foreshadowing.json', 'relationships.json', 'style_guide.json'];
+
+  let fileCount = 0;
+  for (const file of metaFiles) {
+    const src = path.join(storyDir, file);
+    if (await exists(src)) {
+      await fs.copyFile(src, path.join(snapshotDir, '.story', file));
+      fileCount++;
+    }
+  }
+
+  if (await exists(project.manuscriptDir)) {
+    await copyDir(project.manuscriptDir, path.join(snapshotDir, 'manuscript'));
+    const countFiles = async (dir: string): Promise<number> => {
+      let count = 0;
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile()) count++;
+        else if (entry.isDirectory()) count += await countFiles(path.join(dir, entry.name));
+      }
+      return count;
+    };
+    fileCount += await countFiles(project.manuscriptDir);
+  }
+
+  if (await exists(project.bibleDir)) {
+    await copyDir(project.bibleDir, path.join(snapshotDir, 'bible'));
+  }
+
+  if (await exists(project.outlineDir)) {
+    await copyDir(project.outlineDir, path.join(snapshotDir, 'outline'));
+  }
+
+  if (await exists(project.draftsRawDir)) {
+    await copyDir(project.draftsRawDir, path.join(snapshotDir, 'drafts_raw'));
+  }
+
+  const indexPath = path.join(snapshotsDir, 'index.json');
+  const index: SnapshotsIndex = await readJsonFile<SnapshotsIndex>(indexPath) || { snapshots: [] };
+
+  const snapshot: Snapshot = {
+    id: snapshotId,
+    label,
+    createdAt: new Date().toISOString(),
+    fileCount,
+    description,
+  };
+
+  index.snapshots.push(snapshot);
+  await writeJsonFile(indexPath, index);
+
+  return { ...snapshot, snapshotDir };
+}
+
 export function registerSnapshotTools(server: McpServer, getProject: () => StoryProject): void {
 
   // ─── story_snapshot ───
@@ -28,71 +102,20 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
         };
       }
 
-      const snapshotsDir = project.getSnapshotsDir();
-      await fs.mkdir(snapshotsDir, { recursive: true });
-
-      const snapshotId = generateId();
-      const snapshotDir = path.join(snapshotsDir, snapshotId);
-
-      const storyDir = project.storyDir;
-      await fs.mkdir(path.join(snapshotDir, '.story'), { recursive: true });
-
-      const metaFiles = ['config.json', 'status.json', 'timeline.json',
-        'unresolved_holes.json', 'foreshadowing.json', 'relationships.json', 'style_guide.json'];
-
-      let fileCount = 0;
-      for (const file of metaFiles) {
-        const src = path.join(storyDir, file);
-        if (await exists(src)) {
-          await fs.copyFile(src, path.join(snapshotDir, '.story', file));
-          fileCount++;
-        }
-      }
-
-      if (await exists(project.manuscriptDir)) {
-        await copyDir(project.manuscriptDir, path.join(snapshotDir, 'manuscript'));
-        const countFiles = async (dir: string): Promise<number> => {
-          let count = 0;
-          const entries = await fs.readdir(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            if (entry.isFile()) count++;
-            else if (entry.isDirectory()) count += await countFiles(path.join(dir, entry.name));
-          }
-          return count;
-        };
-        fileCount += await countFiles(project.manuscriptDir);
-      }
-
-      if (await exists(project.bibleDir)) {
-        await copyDir(project.bibleDir, path.join(snapshotDir, 'bible'));
-      }
-
-      const indexPath = path.join(snapshotsDir, 'index.json');
-      const index: SnapshotsIndex = await readJsonFile<SnapshotsIndex>(indexPath) || { snapshots: [] };
-
-      const snapshot: Snapshot = {
-        id: snapshotId,
-        label: params.label,
-        createdAt: new Date().toISOString(),
-        fileCount,
-        description: params.description || '',
-      };
-
-      index.snapshots.push(snapshot);
-      await writeJsonFile(indexPath, index);
+      const snapshot = await createSnapshot(project, params.label, params.description || '');
 
       return {
         content: [{
           type: 'text' as const,
           text: `✅ Snapshot đã được tạo!
 
-📸 ID: ${snapshotId}
+📸 ID: ${snapshot.id}
 🏷️  Nhãn: ${params.label}
-📁 Số file: ${fileCount}
+📁 Số file: ${snapshot.fileCount}
 📅 Thời gian: ${snapshot.createdAt}
-📂 Vị trí: ${snapshotDir}
+📂 Vị trí: ${snapshot.snapshotDir}
 
-💡 Để khôi phục: dùng \`story_rollback\` với id = "${snapshotId}"`,
+💡 Để khôi phục: dùng \`story_rollback\` với id = "${snapshot.id}"`,
         }],
       };
     }
@@ -159,12 +182,28 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
 📝 Mô tả: ${targetSnapshot.description || 'N/A'}
 
 ⚠️ Rollback sẽ:
-1. Tạo snapshot hiện tại (backup trước khi rollback)
+1. Tạo snapshot backup của trạng thái hiện tại (phòng trường hợp hối hận)
 2. Ghi đè metadata .story/ bằng snapshot
 3. Ghi đè manuscript/ bằng snapshot
 4. Ghi đè bible/ bằng snapshot
+5. Ghi đè outline/ bằng snapshot
+6. Ghi đè drafts_raw/ bằng snapshot
 
 Để thực hiện, gọi lại với confirm: true.`,
+          }],
+        };
+      }
+
+      // ─── Bước 1: Backup trạng thái hiện tại trước khi ghi đè (Data Safety) ───
+      let backupId: string | null = null;
+      try {
+        const backup = await createSnapshot(project, 'pre-rollback', `Backup tự động trước khi rollback về ${targetSnapshot.id}`);
+        backupId = backup.id;
+      } catch (err) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `❌ Không thể tạo snapshot backup trước khi rollback. Đã hủy thao tác để bảo vệ dữ liệu.\n\nLỗi: ${err instanceof Error ? err.message : String(err)}`,
           }],
         };
       }
@@ -180,21 +219,18 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
         }
       }
 
-      const snapshotManuscript = path.join(snapshotDir, 'manuscript');
-      if (await exists(snapshotManuscript)) {
-        if (await exists(project.manuscriptDir)) {
-          await fs.rm(project.manuscriptDir, { recursive: true });
+      const restoreDir = async (srcDir: string, destDir: string): Promise<void> => {
+        if (!await exists(srcDir)) return;
+        if (await exists(destDir)) {
+          await fs.rm(destDir, { recursive: true });
         }
-        await copyDir(snapshotManuscript, project.manuscriptDir);
-      }
+        await copyDir(srcDir, destDir);
+      };
 
-      const snapshotBible = path.join(snapshotDir, 'bible');
-      if (await exists(snapshotBible)) {
-        if (await exists(project.bibleDir)) {
-          await fs.rm(project.bibleDir, { recursive: true });
-        }
-        await copyDir(snapshotBible, project.bibleDir);
-      }
+      await restoreDir(path.join(snapshotDir, 'manuscript'), project.manuscriptDir);
+      await restoreDir(path.join(snapshotDir, 'bible'), project.bibleDir);
+      await restoreDir(path.join(snapshotDir, 'outline'), project.outlineDir);
+      await restoreDir(path.join(snapshotDir, 'drafts_raw'), project.draftsRawDir);
 
       return {
         content: [{
@@ -203,6 +239,8 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
 
 📸 Đã khôi phục về snapshot: ${targetSnapshot.id} (${targetSnapshot.label})
 📅 Snapshot tạo lúc: ${targetSnapshot.createdAt}
+🔐 Backup của trạng thái trước rollback: ${backupId}
+   (nếu muốn hoàn tác rollback, dùng story_rollback với id "${backupId}")
 
 ⚠️ Các thay đổi sau snapshot đã bị ghi đè.`,
         }],

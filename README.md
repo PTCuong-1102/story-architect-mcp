@@ -28,7 +28,7 @@ flowchart TD
     end
 
     subgraph MCP["story-architect-mcp Server"]
-        Tools["20 MCP Tools"]
+        Tools["21 MCP Tools"]
         Res["6 Resources & 3 Templates"]
         Prompts["5 Workflow Prompts"]
     end
@@ -73,7 +73,7 @@ flowchart TD
 
 ### 🧠 3. Knowledge Graph & Story Bible Integration
 * **Automatic Entity Extraction (`story_extract_entities_to_bible`)**: Parses chapter drafts to automatically create structured Markdown profiles in `bible/characters/` and `bible/world/`.
-* **Dynamic Relationship Graph (`story_map_relationships`)**: Tracks changing relationships between characters across chapters into `.story/relationships.json`.
+* **Dynamic Relationship Graph (`story_map_relationships`)**: Tracks changing relationships between characters across chapters into `.story/relationships.json` — can be auto-detected from manuscript co-occurrences or updated manually.
 * **Token-Budget Context Querying (`story_query_context`)**: Generates optimized context packages for LLMs by combining graph memory traversal with token budget constraints.
 
 ### 📈 4. Pacing, Voice Drift & Analytics
@@ -83,7 +83,7 @@ flowchart TD
 
 ### ✍️ 5. AI Prompt Generator & Manuscript Export
 * **Context-Rich Prompt Builder (`story_generate_writing_prompt`)**: Automatically compiles lore, recent chapter endings, outline beats, and active Chekhov's guns into an optimized writing prompt.
-* **Multi-Format Export (`story_export`)**: Compiles manuscript files into Markdown, EPUB, PDF, or DOCX formats with custom metadata and Table of Contents.
+* **Multi-Format Export (`story_export`)**: Compiles manuscript files into Markdown, HTML, EPUB, or DOCX formats with custom metadata and Table of Contents. (For PDF, export to HTML and print-to-PDF from a browser.)
 
 ---
 
@@ -102,6 +102,8 @@ my-epic-novel/
 │   ├── foreshadowing.json       # Chekhov's gun tracker (Setups & Payoffs)
 │   ├── style_guide.json         # Voice, tone, sentence rules & reference excerpts
 │   └── snapshots/               # Version snapshots for rollback protection
+├── .cbm/                         # Knowledge Graph cache & index
+│   └── index.json                # Precomputed entity/relationship index
 ├── bible/                       # Story Bible & Worldbuilding Lore
 │   ├── characters/              # Character profiles with YAML frontmatter
 │   ├── world/                   # Locations, factions, magic/tech systems
@@ -193,7 +195,7 @@ If you prefer to load a specific project on server startup, pass the directory a
 
 ## 🛠️ MCP API Reference
 
-### 1. MCP Tools (20 Tools)
+### 1. MCP Tools (21 Tools)
 
 #### 🔹 Project & Structure Management
 | Tool Name | Key Parameters | Description |
@@ -234,7 +236,7 @@ If you prefer to load a specific project on server startup, pass the directory a
 | `story_analyze_pacing` | `chapter_range` | Computes Action / Dialogue / Description ratio and scene tension curves. |
 | `story_analyze_voice` | `chapter_range` | Checks sentence length, vocabulary richness, and POV/tense compliance against style guide. |
 | `story_generate_writing_prompt` | `target_chapter_id`, `strategy` | Compiles lore, outlines, recent endings, and style rules into an optimized prompt. |
-| `story_export` | `format`, `output_path`, `include_outline` | Compiles manuscript into Markdown, EPUB, PDF, or DOCX formats. |
+| `story_export` | `format`, `output_path`, `include_outline` | Compiles manuscript into Markdown, HTML, EPUB, or DOCX formats (PDF via HTML print-to-PDF). |
 
 ---
 

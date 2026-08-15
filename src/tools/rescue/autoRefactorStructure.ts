@@ -6,6 +6,7 @@ import { StoryProject } from '../../server/StoryProject.js';
 import { walkDir, readTextFile, exists } from '../../utils/fileUtils.js';
 import { countWords } from '../../utils/wordCount.js';
 import type { RefactorAction } from '../../server/types.js';
+import { createSnapshot } from './snapshot.js';
 
 function determineDestination(
   filePath: string,
@@ -170,6 +171,19 @@ ${preview}
       let movedCount = 0;
       const errors: string[] = [];
 
+      // ─── Tự động snapshot trước khi thao tác file (Data Safety) ───
+      let snapshotId: string | null = null;
+      try {
+        const snapshot = await createSnapshot(
+          new StoryProject(path.resolve(projectPath)),
+          'pre-refactor',
+          `Auto-snapshot trước khi tái cấu trúc (chiến lược: ${params.strategy})`
+        );
+        snapshotId = snapshot.id;
+      } catch (err) {
+        errors.push(`  ⚠️ Không thể tạo snapshot an toàn: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
       for (const action of actions) {
         if (action.type === 'skip') continue;
 
@@ -203,6 +217,8 @@ ${preview}
   ├── Di chuyển thành công: ${movedCount}
   ├── Bỏ qua: ${actions.filter(a => a.type === 'skip').length}
   └── Lỗi: ${errors.length}
+${snapshotId ? `\n📸 Snapshot an toàn đã tạo trước khi refactor: ${snapshotId}
+   Để khôi phục: story_rollback({ snapshotId: "${snapshotId}" })` : ''}
 
 ${errors.length > 0 ? '❌ Lỗi:\n' + errors.join('\n') : ''}
 

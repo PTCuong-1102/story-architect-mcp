@@ -46,6 +46,7 @@ export function registerInitTool(server: McpServer, getProject: () => StoryProje
           text: `✅ Dự án "${params.name}" đã được khởi tạo thành công!
 
 📁 Cấu trúc thư mục:
+├── .cbm/               ← Cache & Knowledge Graph index
 ├── .story/            ← Metadata & state
 │   ├── config.json
 │   ├── status.json

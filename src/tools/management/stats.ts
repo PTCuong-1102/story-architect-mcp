@@ -20,6 +20,7 @@ export function registerStatsTool(server: McpServer, getProject: () => StoryProj
       }
 
       const config = await project.getConfig();
+      const recorded = await project.recordWritingProgress();
       const status = await project.getStatus();
       const holes = await project.getPlotHoles();
       const foreshadowing = await project.getForeshadowing();
@@ -51,6 +52,27 @@ export function registerStatsTool(server: McpServer, getProject: () => StoryProj
       const filled = Math.round((progress / 100) * barLength);
       const progressBar = '█'.repeat(filled) + '░'.repeat(barLength - filled);
 
+      // Writing velocity: trung bình số từ viết được mỗi ngày (theo writingLog)
+      let velocityPerDay = 0;
+      if (recorded.writingLog.length > 0) {
+        const totalWritten = recorded.writingLog.reduce((sum, e) => sum + e.wordsWritten, 0);
+        const distinctDays = new Set(recorded.writingLog.map(e => e.date)).size;
+        velocityPerDay = distinctDays > 0 ? totalWritten / distinctDays : 0;
+      }
+
+      // Ngày hoàn thành ước tính dựa trên velocity
+      let estimatedCompletion = 'N/A (chưa đủ dữ liệu)';
+      const remaining = Math.max(0, config.targetWordCount - status.totalWordCount);
+      if (velocityPerDay > 0 && remaining > 0) {
+        const daysNeeded = Math.ceil(remaining / velocityPerDay);
+        const completionDate = new Date();
+        completionDate.setDate(completionDate.getDate() + daysNeeded);
+        estimatedCompletion = completionDate.toISOString().slice(0, 10)
+          + ` (cần ~${daysNeeded} ngày, ${Math.round(velocityPerDay)} từ/ngày)`;
+      } else if (remaining === 0) {
+        estimatedCompletion = '✅ Đã đạt mục tiêu!';
+      }
+
       const plantedCount = foreshadowing.items.filter(i => i.status === 'planted').length;
       const firedCount = foreshadowing.items.filter(i => i.status === 'fired').length;
 
@@ -67,6 +89,10 @@ export function registerStatsTool(server: McpServer, getProject: () => StoryProj
 📝 Tiến độ:
   ${progressBar} ${progress}%
   ${status.totalWordCount.toLocaleString()} / ${config.targetWordCount.toLocaleString()} từ
+
+🚀 Tốc độ viết (velocity): ${Math.round(velocityPerDay)} từ/ngày
+📅 Ước tính hoàn thành: ${estimatedCompletion}
+${recorded.lastWrittenAt ? `🕐 Lần ghi nhận cuối: ${recorded.lastWrittenAt}` : ''}
 
 📚 Cấu trúc:
   Arcs: ${status.arcCount}

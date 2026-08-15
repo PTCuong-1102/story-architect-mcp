@@ -1,11 +1,13 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
+import matter from 'gray-matter';
 import {
   readJsonFile,
   writeJsonFile,
   readTextFile,
   exists,
   findMarkdownFiles,
+  isSafePathSegment,
 } from '../utils/fileUtils.js';
 import { countWords } from '../utils/wordCount.js';
 import {
@@ -116,6 +118,42 @@ export class StoryProject {
     await writeJsonFile(this.statusPath(), { ...current, ...status });
   }
 
+  /**
+   * Ghi nhận tiến độ viết (writing progress):
+   * so sánh word count hiện tại với mốc đã lưu trước đó, nếu có delta dương
+   * thì bổ sung entry vào writingLog và cập nhật lastWrittenAt.
+   * Trả về status đã lưu (dùng để tính writing velocity).
+   */
+  async recordWritingProgress(): Promise<StoryStatus> {
+    const raw = await readJsonFile<unknown>(this.statusPath());
+    const stored = raw ? StoryStatusSchema.parse(raw) : StoryStatusSchema.parse({});
+    const currentWordCount = await this.calculateTotalWordCount();
+
+    const delta = Math.max(0, currentWordCount - (stored.totalWordCount || 0));
+
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const writingLog = [...stored.writingLog];
+
+    if (delta > 0) {
+      const lastEntry = writingLog[writingLog.length - 1];
+      if (lastEntry && lastEntry.date === today) {
+        lastEntry.wordsWritten += delta;
+      } else {
+        writingLog.push({ date: today, wordsWritten: delta, chaptersWorked: [] });
+      }
+    }
+
+    const updated: StoryStatus = {
+      ...stored,
+      totalWordCount: currentWordCount,
+      lastWrittenAt: now.toISOString(),
+      writingLog,
+    };
+    await writeJsonFile(this.statusPath(), updated);
+    return updated;
+  }
+
   // ====== Timeline ======
 
   async getTimeline(): Promise<Timeline> {
@@ -191,26 +229,12 @@ export class StoryProject {
     for (const p of possiblePaths) {
       const content = await readTextFile(p);
       if (content !== null) {
-        // Parse YAML frontmatter if present
-        const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-        if (fmMatch) {
-          try {
-            // Simple YAML key:value parsing
-            const fm: Record<string, unknown> = {};
-            for (const line of fmMatch[1].split('\n')) {
-              const colonIdx = line.indexOf(':');
-              if (colonIdx > 0) {
-                const key = line.substring(0, colonIdx).trim();
-                const val = line.substring(colonIdx + 1).trim();
-                fm[key] = val;
-              }
-            }
-            return { frontmatter: fm, content: fmMatch[2].trim() };
-          } catch {
-            return { frontmatter: {}, content };
-          }
-        }
-        return { frontmatter: {}, content };
+        // Parse YAML frontmatter bằng gray-matter (hỗ trợ cú pháp YAML đầy đủ)
+        const parsed = matter(content);
+        return {
+          frontmatter: parsed.data as Record<string, unknown>,
+          content: parsed.content.trim(),
+        };
       }
     }
     return null;
@@ -234,7 +258,10 @@ export class StoryProject {
     ];
     for (const p of possiblePaths) {
       const content = await readTextFile(p);
-      if (content !== null) return content;
+      if (content !== null) {
+        // Tách frontmatter để trả về phần nội dung lore sạch sẽ
+        return matter(content).content.trim();
+      }
     }
     return null;
   }
@@ -242,6 +269,7 @@ export class StoryProject {
   // ====== Manuscript ======
 
   async getChapterContent(arc: string, chapter: string): Promise<string | null> {
+    if (!isSafePathSegment(arc) || !isSafePathSegment(chapter)) return null;
     const chapterPath = path.join(this.manuscriptDir, arc, `${chapter}.md`);
     return readTextFile(chapterPath);
   }
@@ -250,13 +278,17 @@ export class StoryProject {
     if (!await exists(this.manuscriptDir)) return [];
     try {
       const entries = await fs.readdir(this.manuscriptDir, { withFileTypes: true });
-      return entries.filter(e => e.isDirectory()).map(e => e.name).sort();
+      return entries
+        .filter(e => e.isDirectory() && isSafePathSegment(e.name))
+        .map(e => e.name)
+        .sort();
     } catch {
       return [];
     }
   }
 
   async listChaptersInArc(arc: string): Promise<string[]> {
+    if (!isSafePathSegment(arc)) return [];
     const arcDir = path.join(this.manuscriptDir, arc);
     if (!await exists(arcDir)) return [];
     try {
@@ -264,6 +296,7 @@ export class StoryProject {
       return entries
         .filter(f => f.endsWith('.md'))
         .map(f => f.replace('.md', ''))
+        .filter(f => isSafePathSegment(f))
         .sort();
     } catch {
       return [];
@@ -304,6 +337,7 @@ export class StoryProject {
     const dirs = [
       this.storyDir,
       path.join(this.storyDir, 'snapshots'),
+      path.join(this.projectPath, '.cbm'),
       path.join(this.bibleDir, 'characters'),
       path.join(this.bibleDir, 'world'),
       path.join(this.bibleDir, 'subplots'),

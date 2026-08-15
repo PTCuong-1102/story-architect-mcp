@@ -3,7 +3,7 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../../server/StoryProject.js';
-import { walkDir, readTextFile, getFileSize } from '../../utils/fileUtils.js';
+import { walkDir, readFileBuffer, detectTextEncoding, decodeBuffer, getFileSize } from '../../utils/fileUtils.js';
 import { countWords } from '../../utils/wordCount.js';
 import type { FileClassification } from '../../server/types.js';
 
@@ -115,7 +115,9 @@ export function registerScanMessyProjectTool(server: McpServer, getProject: () =
       const fileContents: Map<string, string> = new Map();
 
       for (const file of files) {
-        const content = await readTextFile(file) || '';
+        const buffer = await readFileBuffer(file) || Buffer.alloc(0);
+        const encoding = detectTextEncoding(buffer);
+        const content = decodeBuffer(buffer, encoding);
         const relPath = path.relative(scanPath, file);
         const words = countWords(content);
         const { category, confidence } = classifyFile(file, content);
@@ -126,7 +128,7 @@ export function registerScanMessyProjectTool(server: McpServer, getProject: () =
           path: relPath,
           category,
           confidence,
-          encoding: 'utf-8',
+          encoding: encoding === 'ascii' ? 'utf-8' : encoding,
           wordCount: words,
           similarTo: [],
         });
@@ -164,7 +166,7 @@ export function registerScanMessyProjectTool(server: McpServer, getProject: () =
 
       const report = classifications.map(c => {
         const simInfo = c.similarTo.length > 0 ? ` ⚠️ Tương tự: ${c.similarTo.join(', ')}` : '';
-        return `  ${c.category.padEnd(12)} [${Math.round(c.confidence * 100)}%] ${c.path} (${c.wordCount} từ)${simInfo}`;
+        return `  ${c.category.padEnd(12)} [${Math.round(c.confidence * 100)}%] ${c.encoding.padEnd(12)} ${c.path} (${c.wordCount} từ)${simInfo}`;
       }).join('\n');
 
       return {

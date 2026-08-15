@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { StoryProject } from '../server/StoryProject.js';
-import { readTextFile } from '../utils/fileUtils.js';
+import { readTextFile, isSafePathSegment } from '../utils/fileUtils.js';
 import * as path from 'node:path';
 
 /**
@@ -40,7 +40,10 @@ export function registerPrompts(server: McpServer, getProject: () => StoryProjec
       }
 
       const outlinePath = path.join(project.outlineDir, arc, `${chapter}_outline.md`);
-      const outlineContent = await readTextFile(outlinePath) || '_Chưa có dàn ý cho chương này._';
+      const outlineContent = isSafePathSegment(arc) && isSafePathSegment(chapter)
+        ? await readTextFile(outlinePath)
+        : null;
+      const outlineText = outlineContent || '_Chưa có dàn ý cho chương này._';
 
       const unfiredSetups = foreshadowing.items
         .filter(i => i.status === 'planted')
@@ -73,7 +76,7 @@ ${styleGuide.avoidWords.length > 0 ? `\n- Tránh dùng: ${styleGuide.avoidWords.
 ${previousChapterContent || '_Đây là chương đầu tiên._'}
 
 ## Dàn ý chương mới
-${outlineContent}
+${outlineText}
 
 ## Chi tiết cài cắm chưa giải gỡ (Chekhov's Guns chưa bắn)
 ${unfiredSetups || '_Không có._'}
@@ -271,7 +274,10 @@ Gọi \`story_init\` nếu chưa có thư mục \`.story/\` để tạo cấu h�
         .join('\n');
 
       const outlinePath = path.join(project.outlineDir, arc, `${chapter}_outline.md`);
-      const outline = await readTextFile(outlinePath) || '_Không có dàn ý._';
+      const outline = isSafePathSegment(arc) && isSafePathSegment(chapter)
+        ? await readTextFile(outlinePath)
+        : null;
+      const outlineText = outline || '_Không có dàn ý._';
 
       return {
         messages: [{
@@ -286,7 +292,7 @@ Gọi \`story_init\` nếu chưa có thư mục \`.story/\` để tạo cấu h�
 ${content ? (content.length > 1500 ? '...\n' + content.slice(-1500) : content) : '_Chương trống._'}
 
 ## Dàn ý
-${outline}
+${outlineText}
 
 ## Chi tiết cài cắm có thể sử dụng
 ${unfired || '_Không có._'}
