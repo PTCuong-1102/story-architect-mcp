@@ -3,7 +3,7 @@
 <div align="center">
 
 [![MCP Compliant](https://img.shields.io/badge/MCP-Compliant-blue.svg?style=for-the-badge&logo=modelcontextprotocol)](https://modelcontextprotocol.io)
-[![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D18.0.0-339933.svg?style=for-the-badge&logo=nodedotjs)](https://nodejs.org)
+[![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D20.0.0-339933.svg?style=for-the-badge&logo=nodedotjs)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6.svg?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 
