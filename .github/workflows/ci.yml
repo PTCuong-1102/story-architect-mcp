@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # Cài đúng theo package-lock.json — chống breaking change upstream (zod ^4, MCP SDK ^2)
+      - name: Install dependencies (frozen lockfile)
+        run: npm ci
+
+      - name: Typecheck & build
+        run: npm run build
+
+      - name: Test
+        run: npm test

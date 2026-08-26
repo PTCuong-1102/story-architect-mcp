@@ -45,85 +45,70 @@ const NOVEL_PROJECT_MARKERS = ['.story', 'manuscript', 'bible', 'outline', 'draf
 
 type ProjectType = 'novel' | 'code' | 'empty' | 'unknown';
 
-interface ProjectDetection {
+export type ProjectDetection = {
   type: ProjectType;
   confidence: number;
   novelSignals: string[];
   codeSignals: string[];
+};
+
+function emptyDetection(): ProjectDetection {
+  return { type: 'empty', confidence: 1.0, novelSignals: [], codeSignals: [] };
+}
+
+/** Thu thập markers tiểu thuyết có trong thư mục. */
+function collectNovelSignals(entries: string[]): string[] {
+  return NOVEL_PROJECT_MARKERS.filter(marker => entries.includes(marker));
+}
+
+/** Thu thập code file markers (hỗ trợ glob đơn giản `*.ext`). */
+function collectCodeFileSignals(entries: string[]): string[] {
+  const signals: string[] = [];
+  for (const marker of CODE_PROJECT_MARKERS) {
+    if (marker.startsWith('*')) {
+      const ext = marker.slice(1);
+      if (entries.some(e => e.endsWith(ext))) signals.push(marker);
+    } else if (entries.includes(marker.toLowerCase())) {
+      signals.push(marker);
+    }
+  }
+  return signals;
 }
 
 /**
- * Phát hiện loại dự án: tiểu thuyết, code, trống, hay không rõ.
+ * Thu thập code dir markers thực sự là directory.
+ * Bỏ qua '.git' vì novel project cũng có thể có.
  */
-async function detectProjectType(dirPath: string): Promise<ProjectDetection> {
-  const novelSignals: string[] = [];
-  const codeSignals: string[] = [];
-
-  let entries: string[];
-  try {
-    entries = (await fs.readdir(dirPath)).map(e => e.toLowerCase());
-  } catch {
-    return { type: 'empty', confidence: 1.0, novelSignals: [], codeSignals: [] };
-  }
-
-  if (entries.length === 0) {
-    return { type: 'empty', confidence: 1.0, novelSignals: [], codeSignals: [] };
-  }
-
-  // Kiểm tra novel markers
-  for (const marker of NOVEL_PROJECT_MARKERS) {
-    if (entries.includes(marker)) {
-      novelSignals.push(marker);
+async function collectCodeDirSignals(dirPath: string, entries: string[]): Promise<string[]> {
+  const signals: string[] = [];
+  for (const marker of CODE_DIR_MARKERS.filter(d => d !== '.git')) {
+    if (!entries.includes(marker)) continue;
+    try {
+      const stat = await fs.stat(path.join(dirPath, marker));
+      if (stat.isDirectory()) signals.push(`${marker}/`);
+    } catch {
+      // Bỏ qua entry không stat được
     }
   }
+  return signals;
+}
 
-  // Kiểm tra code file markers
-  for (const marker of CODE_PROJECT_MARKERS) {
-    if (marker.startsWith('*')) {
-      // Glob pattern (e.g., *.csproj)
-      const ext = marker.slice(1);
-      if (entries.some(e => e.endsWith(ext))) {
-        codeSignals.push(marker);
-      }
-    } else {
-      if (entries.includes(marker.toLowerCase())) {
-        codeSignals.push(marker);
-      }
-    }
-  }
-
-  // Kiểm tra code dir markers (nhưng chỉ những thư mục đặc trưng cho code)
-  // Bỏ qua 'dist' và '.git' vì novel project cũng có thể có
-  const codeOnlyDirs = CODE_DIR_MARKERS.filter(d => d !== '.git');
-  for (const marker of codeOnlyDirs) {
-    if (entries.includes(marker)) {
-      // Kiểm tra thật sự là directory
-      try {
-        const stat = await fs.stat(path.join(dirPath, marker));
-        if (stat.isDirectory()) {
-          codeSignals.push(`${marker}/`);
-        }
-      } catch {
-        // Bỏ qua
-      }
-    }
-  }
-
-  // Quyết định type
-  const novelScore = novelSignals.length;
-  const codeScore = codeSignals.length;
-
+/** Quyết định loại dự án từ hai tập tín hiệu (thuần, không I/O). */
+function decideProjectType(novelSignals: string[], codeSignals: string[]): ProjectDetection {
   // Nếu có .story/ → chắc chắn là novel (đã init bởi story-architect)
   if (novelSignals.includes('.story')) {
     return { type: 'novel', confidence: 1.0, novelSignals, codeSignals };
   }
 
-  // Nếu có nhiều novel markers → likely novel
+  const novelScore = novelSignals.length;
+  const codeScore = codeSignals.length;
+
+  // Nhiều novel markers → likely novel
   if (novelScore >= 2) {
     return { type: 'novel', confidence: 0.8, novelSignals, codeSignals };
   }
 
-  // Nếu có code markers rõ ràng và không có novel markers → code project
+  // Code markers rõ ràng và không có novel markers → code project
   if (codeScore > 0 && novelScore === 0) {
     return { type: 'code', confidence: Math.min(0.95, 0.5 + codeScore * 0.15), novelSignals, codeSignals };
   }
@@ -134,6 +119,30 @@ async function detectProjectType(dirPath: string): Promise<ProjectDetection> {
   }
 
   return { type: 'unknown', confidence: 0.5, novelSignals, codeSignals };
+}
+
+/**
+ * Phát hiện loại dự án: tiểu thuyết, code, trống, hay không rõ.
+ */
+export async function detectProjectType(dirPath: string): Promise<ProjectDetection> {
+  let entries: string[];
+  try {
+    entries = (await fs.readdir(dirPath)).map(e => e.toLowerCase());
+  } catch {
+    return emptyDetection();
+  }
+
+  if (entries.length === 0) {
+    return emptyDetection();
+  }
+
+  const novelSignals = collectNovelSignals(entries);
+  const codeSignals = [
+    ...collectCodeFileSignals(entries),
+    ...(await collectCodeDirSignals(dirPath, entries)),
+  ];
+
+  return decideProjectType(novelSignals, codeSignals);
 }
 
 /**
