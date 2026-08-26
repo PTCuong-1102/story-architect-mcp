@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { StoryProject } from '../server/StoryProject.js';
 import { markdownToHtml, htmlDocument } from '../utils/markdownToHtml.js';
 import { createZip } from '../utils/zip.js';
+import { errResult } from '../utils/mcpResults.js';
 
 const escapeXml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -270,9 +271,7 @@ export function registerExportTool(server: McpServer, getProject: () => StoryPro
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
       const config = await project.getConfig();
@@ -323,16 +322,11 @@ export function registerExportTool(server: McpServer, getProject: () => StoryPro
       }
 
       if (!written) {
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `❌ Định dạng "${params.format}" hiện chưa được hỗ trợ trực tiếp (PDF yêu cầu nhúng font, chưa hỗ trợ tiếng Việt chuẩn).
+        return errResult(`❌ Định dạng "${params.format}" hiện chưa được hỗ trợ trực tiếp (PDF yêu cầu nhúng font, chưa hỗ trợ tiếng Việt chuẩn).
             
 💡 Cách xuất PDF: xuất định dạng \`html\` rồi mở bằng trình duyệt và "In → Save as PDF".
 
-✅ Các định dạng đang hỗ trợ: markdown_single, html, epub, docx.`,
-          }],
-        };
+✅ Các định dạng đang hỗ trợ: markdown_single, html, epub, docx.`);
       }
 
       return {

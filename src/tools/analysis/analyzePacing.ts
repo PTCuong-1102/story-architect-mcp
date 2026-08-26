@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { countWords } from '../../utils/wordCount.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 /**
  * Phân tích pacing của một chương: Action / Dialogue / Description balance & Tension score.
@@ -97,9 +98,7 @@ export function registerAnalyzePacingTool(server: McpServer, getProject: () => S
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
       const chaptersToAnalyze = params.chapter
@@ -107,9 +106,7 @@ export function registerAnalyzePacingTool(server: McpServer, getProject: () => S
         : await project.listChaptersInArc(params.arc);
 
       if (chaptersToAnalyze.length === 0) {
-        return {
-          content: [{ type: 'text' as const, text: `⚠️ Không tìm thấy chương nào trong ${params.arc}` }],
-        };
+        return errResult(`⚠️ Không tìm thấy chương nào trong ${params.arc}`);
       }
 
       const results: string[] = [];

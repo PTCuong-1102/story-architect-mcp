@@ -6,6 +6,7 @@ import { StoryProject } from '../../server/StoryProject.js';
 import { walkDir, readFileBuffer, detectTextEncoding, decodeBuffer, getFileSize } from '../../utils/fileUtils.js';
 import { countWords } from '../../utils/wordCount.js';
 import type { FileClassification } from '../../server/types.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 function classifyFile(filePath: string, content: string): { category: FileClassification['category']; confidence: number } {
   const basename = path.basename(filePath).toLowerCase();
@@ -98,9 +99,7 @@ export function registerScanMessyProjectTool(server: McpServer, getProject: () =
       try {
         await fs.access(scanPath);
       } catch {
-        return {
-          content: [{ type: 'text' as const, text: `❌ Không tìm thấy thư mục: ${scanPath}` }],
-        };
+        return errResult(`❌ Không tìm thấy thư mục: ${scanPath}`);
       }
 
       const files = await walkDir(scanPath, ['.md', '.txt', '.doc', '.rtf']);

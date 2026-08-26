@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import type { TimelineEvent } from '../../server/types.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 /** Trích các thành phần số từ chuỗi (ví dụ "arc_01/ch_002" → [1, 2]). */
 function numericParts(s: string): number[] {
@@ -97,9 +98,7 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
       const timeline = await project.getTimeline();

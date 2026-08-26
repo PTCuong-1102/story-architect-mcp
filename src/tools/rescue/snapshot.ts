@@ -5,6 +5,7 @@ import * as fs from 'node:fs/promises';
 import { StoryProject } from '../../server/StoryProject.js';
 import { exists, copyDir, generateId, readJsonFile, writeJsonFile } from '../../utils/fileUtils.js';
 import type { SnapshotsIndex, Snapshot } from '../../server/types.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 /**
  * Tạo snapshot dùng chung cho dự án (được story_snapshot và các tool
@@ -97,9 +98,7 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
       const snapshot = await createSnapshot(project, params.label, params.description || '');
@@ -139,9 +138,7 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
 
       const index: SnapshotsIndex | null = await readJsonFile<SnapshotsIndex>(indexPath);
       if (!index || index.snapshots.length === 0) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Không có snapshot nào. Hãy tạo snapshot trước bằng `story_snapshot`.' }],
-        };
+        return errResult('❌ Không có snapshot nào. Hãy tạo snapshot trước bằng `story_snapshot`.');
       }
 
       let targetSnapshot: Snapshot | undefined;
@@ -153,20 +150,13 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
 
       if (!targetSnapshot) {
         const available = index.snapshots.map(s => `  - ${s.id} (${s.label}, ${s.createdAt})`).join('\n');
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `❌ Không tìm thấy snapshot: ${params.snapshotId}\n\n📋 Snapshots có sẵn:\n${available}`,
-          }],
-        };
+        return errResult(`❌ Không tìm thấy snapshot: ${params.snapshotId}\n\n📋 Snapshots có sẵn:\n${available}`);
       }
 
       const snapshotDir = path.join(snapshotsDir, targetSnapshot.id);
 
       if (!await exists(snapshotDir)) {
-        return {
-          content: [{ type: 'text' as const, text: `❌ Thư mục snapshot không tồn tại: ${snapshotDir}` }],
-        };
+        return errResult(`❌ Thư mục snapshot không tồn tại: ${snapshotDir}`);
       }
 
       if (!params.confirm) {
@@ -200,12 +190,7 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
         const backup = await createSnapshot(project, 'pre-rollback', `Backup tự động trước khi rollback về ${targetSnapshot.id}`);
         backupId = backup.id;
       } catch (err) {
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `❌ Không thể tạo snapshot backup trước khi rollback. Đã hủy thao tác để bảo vệ dữ liệu.\n\nLỗi: ${err instanceof Error ? err.message : String(err)}`,
-          }],
-        };
+        return errResult(`❌ Không thể tạo snapshot backup trước khi rollback. Đã hủy thao tác để bảo vệ dữ liệu.\n\nLỗi: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       const snapshotStoryDir = path.join(snapshotDir, '.story');

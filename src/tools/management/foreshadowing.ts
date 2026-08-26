@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { generateId } from '../../utils/fileUtils.js';
 import type { ForeshadowingItem } from '../../server/types.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 export function registerForeshadowingTools(server: McpServer, getProject: () => StoryProject): void {
 
@@ -24,9 +25,7 @@ export function registerForeshadowingTools(server: McpServer, getProject: () => 
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo.');
       }
 
       const data = await project.getForeshadowing();
@@ -79,9 +78,7 @@ ${newItem.setupLine ? `💬 Trích dẫn: "${newItem.setupLine}"` : ''}
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo.');
       }
 
       const data = await project.getForeshadowing();
@@ -92,12 +89,7 @@ ${newItem.setupLine ? `💬 Trích dẫn: "${newItem.setupLine}"` : ''}
           .filter(i => i.status === 'planted')
           .map(i => `  - ${i.id}: ${i.setup} [${i.importance}] (${i.setupChapter})`)
           .join('\n');
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `❌ Không tìm thấy: ${params.id}\n\n🌱 Chi tiết chưa giải gỡ:\n${available || '  _Không có._'}`,
-          }],
-        };
+        return errResult(`❌ Không tìm thấy: ${params.id}\n\n🌱 Chi tiết chưa giải gỡ:\n${available || '  _Không có._'}`);
       }
 
       item.status = 'fired';
@@ -136,9 +128,7 @@ ${newItem.setupLine ? `💬 Trích dẫn: "${newItem.setupLine}"` : ''}
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo.');
       }
 
       const data = await project.getForeshadowing();

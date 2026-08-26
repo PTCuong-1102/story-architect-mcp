@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { generateId } from '../../utils/fileUtils.js';
 import type { PlotHole } from '../../server/types.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 export function registerPlotHoleTools(server: McpServer, getProject: () => StoryProject): void {
 
@@ -25,9 +26,7 @@ export function registerPlotHoleTools(server: McpServer, getProject: () => Story
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
       const data = await project.getPlotHoles();
@@ -80,9 +79,7 @@ export function registerPlotHoleTools(server: McpServer, getProject: () => Story
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo.');
       }
 
       const data = await project.getPlotHoles();
@@ -93,12 +90,7 @@ export function registerPlotHoleTools(server: McpServer, getProject: () => Story
           .filter(h => h.status === 'open')
           .map(h => `  - ${h.id}: ${h.title} [${h.severity}]`)
           .join('\n');
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `❌ Không tìm thấy plot hole: ${params.id}\n\n📋 Các plot hole đang mở:\n${available || '  _Không có._'}`,
-          }],
-        };
+        return errResult(`❌ Không tìm thấy plot hole: ${params.id}\n\n📋 Các plot hole đang mở:\n${available || '  _Không có._'}`);
       }
 
       hole.status = params.status;

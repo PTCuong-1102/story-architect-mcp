@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import { StoryProject } from '../server/StoryProject.js';
 import { readTextFile, isSafePathSegment } from '../utils/fileUtils.js';
+import { errResult } from '../utils/mcpResults.js';
 
 export function registerGenerateWritingPromptTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -21,9 +22,7 @@ export function registerGenerateWritingPromptTool(server: McpServer, getProject:
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
       const config = await project.getConfig();

@@ -7,6 +7,7 @@ import { walkDir, readTextFile, exists } from '../../utils/fileUtils.js';
 import { countWords } from '../../utils/wordCount.js';
 import type { RefactorAction } from '../../server/types.js';
 import { createSnapshot } from './snapshot.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 function determineDestination(
   filePath: string,
@@ -94,9 +95,7 @@ export function registerAutoRefactorTool(server: McpServer, getProject: () => St
       const projectPath = params.projectPath;
 
       if (!await exists(projectPath)) {
-        return {
-          content: [{ type: 'text' as const, text: `❌ Không tìm thấy: ${projectPath}` }],
-        };
+        return errResult(`❌ Không tìm thấy: ${projectPath}`);
       }
 
       const standardDirs = ['.story', '.cbm', 'bible', 'manuscript', 'outline', 'drafts_raw', 'export', 'node_modules'];

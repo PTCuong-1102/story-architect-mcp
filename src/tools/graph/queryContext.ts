@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { countWords } from '../../utils/wordCount.js';
 import { loadOrBuildIndex, searchEntities, expandRelationships } from '../../utils/knowledgeGraph.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 export function registerQueryContextTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -21,9 +22,7 @@ export function registerQueryContextTool(server: McpServer, getProject: () => St
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
       const config = await project.getConfig();

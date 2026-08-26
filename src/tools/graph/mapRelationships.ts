@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import type { Relationship } from '../../server/types.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 /**
  * Tự phân tích bản thảo: đếm tần suất hai nhân vật cùng xuất hiện trong một chương.
@@ -70,9 +71,7 @@ export function registerMapRelationshipsTool(server: McpServer, getProject: () =
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
       const data = await project.getRelationships();
@@ -150,12 +149,7 @@ ${report.join('\n')}
 
       // ─── Chế độ thủ công (bắt buộc có source/target/type) ───
       if (!params.source || !params.target || !params.type) {
-        return {
-          content: [{
-            type: 'text' as const,
-            text: '❌ Chế độ thủ công cần đủ: source, target và type. Hoặc bỏ trống source/target để chạy chế độ tự quét manuscript.',
-          }],
-        };
+        return errResult('❌ Chế độ thủ công cần đủ: source, target và type. Hoặc bỏ trống source/target để chạy chế độ tự quét manuscript.');
       }
 
       // Tìm mối quan hệ xem đã tồn tại chưa

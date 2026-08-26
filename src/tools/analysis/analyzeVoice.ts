@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { countWords, averageSentenceLength } from '../../utils/wordCount.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 export function registerAnalyzeVoiceTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -18,9 +19,7 @@ export function registerAnalyzeVoiceTool(server: McpServer, getProject: () => St
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
       const styleGuide = await project.getStyleGuide();
@@ -29,9 +28,7 @@ export function registerAnalyzeVoiceTool(server: McpServer, getProject: () => St
         : await project.listChaptersInArc(params.arc);
 
       if (chaptersToAnalyze.length === 0) {
-        return {
-          content: [{ type: 'text' as const, text: `⚠️ Không tìm thấy chương nào trong ${params.arc}` }],
-        };
+        return errResult(`⚠️ Không tìm thấy chương nào trong ${params.arc}`);
       }
 
       const reports: string[] = [];

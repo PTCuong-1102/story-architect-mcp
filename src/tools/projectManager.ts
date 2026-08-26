@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../server/StoryProject.js';
+import { errResult } from '../utils/mcpResults.js';
 
 // ─── Project Type Detection ───
 
@@ -177,30 +178,17 @@ export function registerProjectManagerTools(
       try {
         const stat = await fs.stat(resolvedPath);
         if (!stat.isDirectory()) {
-          return {
-            content: [{
-              type: 'text' as const,
-              text: `❌ Đường dẫn không phải là thư mục: ${resolvedPath}`,
-            }],
-          };
+          return errResult(`❌ Đường dẫn không phải là thư mục: ${resolvedPath}`);
         }
       } catch {
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `❌ Không tìm thấy thư mục: ${resolvedPath}\n\n💡 Hãy kiểm tra lại đường dẫn hoặc tạo thư mục trước.`,
-          }],
-        };
+        return errResult(`❌ Không tìm thấy thư mục: ${resolvedPath}\n\n💡 Hãy kiểm tra lại đường dẫn hoặc tạo thư mục trước.`);
       }
 
       // ─── Phát hiện loại dự án ───
       const detection = await detectProjectType(resolvedPath);
 
       if (detection.type === 'code' && !params.force) {
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `🚫 Đây không phải dự án tiểu thuyết — đã phát hiện dự án code.
+        return errResult(`🚫 Đây không phải dự án tiểu thuyết — đã phát hiện dự án code.
 
 📁 Đường dẫn: ${resolvedPath}
 🔍 Phát hiện: ${detection.codeSignals.join(', ')}
@@ -210,9 +198,7 @@ export function registerProjectManagerTools(
    Sử dụng trên dự án code sẽ lãng phí context window và gây nhầm lẫn cho AI.
 
 💡 Nếu đây thực sự là dự án tiểu thuyết, hãy gọi lại với force: true:
-   story_set_project({ projectPath: "${params.projectPath}", force: true })`,
-          }],
-        };
+   story_set_project({ projectPath: "${params.projectPath}", force: true })`);
       }
 
       const previousPath = getCurrentPath();
@@ -295,12 +281,7 @@ Ví dụ:
 
       const project = getProject();
       if (!project) {
-        return {
-          content: [{
-            type: 'text' as const,
-            text: `❌ Lỗi nội bộ: project path đã set nhưng không tạo được instance.`,
-          }],
-        };
+        return errResult(`❌ Lỗi nội bộ: project path đã set nhưng không tạo được instance.`);
       }
 
       const isInitialized = await project.isInitialized();

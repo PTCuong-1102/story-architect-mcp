@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../../server/StoryProject.js';
 import { readTextFile, exists } from '../../utils/fileUtils.js';
+import { errResult } from '../../utils/mcpResults.js';
 
 /**
  * Trích xuất tên riêng dạng Title Case hoặc Capitalized words từ văn bản.
@@ -82,16 +83,12 @@ export function registerExtractEntitiesTool(server: McpServer, getProject: () =>
       const project = getProject();
 
       if (!await project.isInitialized()) {
-        return {
-          content: [{ type: 'text' as const, text: '❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.' }],
-        };
+        return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
       const content = await project.getChapterContent(params.arc, params.chapter);
       if (!content) {
-        return {
-          content: [{ type: 'text' as const, text: `❌ Không tìm thấy chương: ${params.arc}/${params.chapter}` }],
-        };
+        return errResult(`❌ Không tìm thấy chương: ${params.arc}/${params.chapter}`);
       }
 
       const { names, locations } = extractCapitalizedTerms(content);
