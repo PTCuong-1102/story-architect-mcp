@@ -7,6 +7,9 @@ import { StoryProject } from './server/StoryProject.js';
 import { registerResources } from './resources/index.js';
 import { registerPrompts } from './prompts/index.js';
 
+// CLI Commands
+import { runSetupWizard, runInitNovel, runDoctor, runInstallSkill, printHelp } from './cli/index.js';
+
 // Tools: Project Management (runtime project switching)
 import { registerProjectManagerTools } from './tools/projectManager.js';
 
@@ -39,70 +42,100 @@ import { registerTrackEmotionTool } from './tools/analysis/trackEmotion.js';
 // Tools: Generator Suite (Phase 5)
 import { registerGenerateWritingPromptTool } from './tools/generatePrompt.js';
 
-// ─── Runtime-switchable Project State ───
-// CLI arg vẫn hoạt động như trước (backward-compatible).
-// Nếu không truyền arg → chờ story_set_project thiết lập.
-const initialPath = process.argv[2] || null;
-let currentProject: StoryProject | null = initialPath
-  ? new StoryProject(path.resolve(initialPath))
-  : null;
+// ─── CLI Command Dispatcher ───
+const subCommand = process.argv[2]?.toLowerCase();
 
-const getProject = (): StoryProject => {
-  if (!currentProject) {
-    throw new Error('Chưa thiết lập dự án. Hãy gọi tool story_set_project trước.');
+async function handleCliOrServer() {
+  if (subCommand === 'setup' || subCommand === '--setup') {
+    await runSetupWizard(process.argv.slice(3));
+    return;
   }
-  return currentProject;
-};
+  if (subCommand === 'init-novel' || subCommand === 'init') {
+    await runInitNovel(process.argv.slice(3));
+    return;
+  }
+  if (subCommand === 'doctor' || subCommand === '--doctor') {
+    await runDoctor(process.argv.slice(3));
+    return;
+  }
+  if (subCommand === 'install-skill') {
+    await runInstallSkill(process.argv.slice(3));
+    return;
+  }
+  if (subCommand === '--help' || subCommand === '-h' || subCommand === 'help') {
+    printHelp();
+    return;
+  }
+  if (subCommand === '--version' || subCommand === '-v' || subCommand === 'version') {
+    console.log('story-architect-mcp v0.1.0');
+    return;
+  }
 
-const setProject = (projectPath: string): StoryProject => {
-  currentProject = new StoryProject(path.resolve(projectPath));
-  return currentProject;
-};
+  // ─── Default: MCP Server Mode ───
+  await startMcpServer();
+}
 
-const getCurrentPath = (): string | null => {
-  return currentProject?.projectPath ?? null;
-};
+async function startMcpServer() {
+  // Runtime-switchable Project State
+  // CLI arg vẫn hoạt động như trước (backward-compatible).
+  // Nếu không truyền arg → chờ story_set_project thiết lập.
+  const initialPath = process.argv[2] || null;
+  let currentProject: StoryProject | null = initialPath
+    ? new StoryProject(path.resolve(initialPath))
+    : null;
 
-const server = new McpServer({
-  name: 'story-architect-mcp',
-  version: '0.1.0',
-});
+  const getProject = (): StoryProject => {
+    if (!currentProject) {
+      throw new Error('Chưa thiết lập dự án. Hãy gọi tool story_set_project trước.');
+    }
+    return currentProject;
+  };
 
-// ─── Register Resources ───
-registerResources(server, getProject);
+  const setProject = (projectPath: string): StoryProject => {
+    currentProject = new StoryProject(path.resolve(projectPath));
+    return currentProject;
+  };
 
-// ─── Register Prompts ───
-registerPrompts(server, getProject);
+  const getCurrentPath = (): string | null => {
+    return currentProject?.projectPath ?? null;
+  };
 
-// ─── Register Tools (21 Tools total) ───
+  const server = new McpServer({
+    name: 'story-architect-mcp',
+    version: '0.1.0',
+  });
 
-// Project Management (must be first — enables all other tools)
-registerProjectManagerTools(server, setProject, () => currentProject, getCurrentPath);
+  // ─── Register Resources ───
+  registerResources(server, getProject);
 
-registerInitTool(server, getProject);
-registerExportTool(server, getProject);
+  // ─── Register Prompts ───
+  registerPrompts(server, getProject);
 
-registerScanMessyProjectTool(server, getProject);
-registerAutoRefactorTool(server, getProject);
-registerSnapshotTools(server, getProject);
+  // ─── Register Tools (23 Tools total) ───
+  registerProjectManagerTools(server, setProject, () => currentProject, getCurrentPath);
+  registerInitTool(server, getProject);
+  registerExportTool(server, getProject);
 
-registerPlotHoleTools(server, getProject);
-registerStatsTool(server, getProject);
-registerForeshadowingTools(server, getProject);
+  registerScanMessyProjectTool(server, getProject);
+  registerAutoRefactorTool(server, getProject);
+  registerSnapshotTools(server, getProject);
 
-registerExtractEntitiesTool(server, getProject);
-registerMapRelationshipsTool(server, getProject);
-registerQueryContextTool(server, getProject);
+  registerPlotHoleTools(server, getProject);
+  registerStatsTool(server, getProject);
+  registerForeshadowingTools(server, getProject);
 
-registerDetectTimelineTool(server, getProject);
-registerAnalyzePacingTool(server, getProject);
-registerAnalyzeVoiceTool(server, getProject);
-registerAnalyzeSentimentTool(server, getProject);
-registerTrackEmotionTool(server);
+  registerExtractEntitiesTool(server, getProject);
+  registerMapRelationshipsTool(server, getProject);
+  registerQueryContextTool(server, getProject);
 
-registerGenerateWritingPromptTool(server, getProject);
+  registerDetectTimelineTool(server, getProject);
+  registerAnalyzePacingTool(server, getProject);
+  registerAnalyzeVoiceTool(server, getProject);
+  registerAnalyzeSentimentTool(server, getProject);
+  registerTrackEmotionTool(server);
 
-async function main() {
+  registerGenerateWritingPromptTool(server, getProject);
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`[story-architect-mcp] Server started with 23 tools, 7 static resources, 3 templates, and 5 prompts.`);
@@ -113,7 +146,7 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+handleCliOrServer().catch((error) => {
   console.error('[story-architect-mcp] Fatal error:', error);
   process.exit(1);
 });

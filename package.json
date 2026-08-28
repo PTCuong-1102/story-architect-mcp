@@ -1,7 +1,7 @@
 {
   "name": "story-architect-mcp",
   "version": "0.1.0",
-  "description": "MCP Server for AI-assisted novel writing: project structure management, character tracking, timeline analysis, and more.",
+  "description": "A Model Context Protocol (MCP) Server for AI-assisted long-form fiction writing, worldbuilding, continuity auditing, and novel architecture.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -13,21 +13,34 @@
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "novel",
     "writing",
     "story",
-    "ai"
+    "worldbuilding",
+    "fiction",
+    "ai",
+    "claude",
+    "cursor"
   ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
+    "setup": "node dist/index.js setup",
+    "doctor": "node dist/index.js doctor",
+    "init-novel": "node dist/index.js init-novel",
     "test": "tsx --test test/*.test.ts",
     "prepare": "npm run build"
   },
   "files": [
-    "dist"
+    "dist",
+    "scripts",
+    ".agents"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=20.0.0"

@@ -9,7 +9,7 @@
 
 **A Model Context Protocol (MCP) Server for AI-Assisted Long-Form Fiction Writing, Worldbuilding, Continuity Auditing, and Novel Architecture.**
 
-[Key Features](#-key-features) • [Novel-as-Code](#-the-novels-as-codebases-paradigm) • [Quick Start](#-quick-start) • [Client Setup](#%EF%B8%8F-mcp-client-configuration) • [API Reference](#%EF%B8%8F-mcp-api-reference)
+[🚀 Quick Start & 1-Click Setup](#-quick-start--1-click-setup) • [Key Features](#-key-features) • [Novel-as-Code](#-the-novels-as-codebases-paradigm) • [Client Configs](#%EF%B8%8F-mcp-client-configuration) • [API Reference](#%EF%B8%8F-mcp-api-reference)
 
 </div>
 
@@ -23,7 +23,7 @@ Writing long-form fiction (epics, thrillers, fantasy sagas, or multi-volume seri
 
 ```mermaid
 flowchart TD
-    subgraph Client["MCP Clients (Claude Desktop / Cursor / Antigravity / Windsurf)"]
+    subgraph Client["MCP Clients (Claude Desktop / Cursor / Antigravity / Windsurf / VS Code)"]
         AI["AI LLM Agent"]
     end
 
@@ -42,6 +42,48 @@ flowchart TD
 
     AI <-->|JSON-RPC via Stdio| MCP
     MCP <-->|Read / Write / Snapshot| Storage
+```
+
+---
+
+## 🚀 Quick Start & 1-Click Setup
+
+### Cách 1: Tự Động 1-Lệnh (Khuyên Dùng) ⚡
+
+Không cần chỉnh sửa file JSON thủ công! Chạy trình hướng dẫn cài đặt tự động để tự phát hiện và cấu hình cho tất cả MCP client có trên máy:
+
+```bash
+npx -y story-architect-mcp setup
+```
+
+Hoặc dùng script 1-dòng:
+* **macOS / Linux**:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/PTCuong-1102/story-architect-mcp/main/scripts/install.sh | bash
+  ```
+* **Windows (PowerShell)**:
+  ```powershell
+  iwr -useb https://raw.githubusercontent.com/PTCuong-1102/story-architect-mcp/main/scripts/install.ps1 | iex
+  ```
+
+---
+
+### Cách 2: Khởi Tạo Dự Án Tiểu Thuyết Mới (Novel Scaffolding)
+
+Tạo ngay một workspace tiểu thuyết chuẩn với đầy đủ hồ sơ nhân vật mẫu, lore thế giới, tóm tắt cốt truyện và chương 1:
+
+```bash
+npx -y story-architect-mcp init-novel ./my-epic-novel
+```
+
+---
+
+### Cách 3: Kiểm Tra Môi Trường & Chẩn Đoán (Doctor Tool)
+
+Kiểm tra trạng thái Node.js và các file cấu hình MCP client:
+
+```bash
+npx -y story-architect-mcp doctor
 ```
 
 ---
@@ -124,32 +166,11 @@ my-epic-novel/
 
 ---
 
-## 🚀 Quick Start
+## ⚙️ MCP Client Configuration (Manual Setup)
 
-### 1. Installation
+Nếu bạn muốn cấu hình thủ công thay vì chạy `npx story-architect-mcp setup`:
 
-Install globally via `npm`:
-
-```bash
-npm install -g story-architect-mcp
-```
-
-Or build from source:
-
-```bash
-git clone https://github.com/PTCuong-1102/story-architect-mcp.git
-cd story-architect-mcp
-npm install
-npm run build
-```
-
----
-
-## ⚙️ MCP Client Configuration
-
-Add `story-architect-mcp` to your favorite MCP client configuration.
-
-> **💡 Zero-Config Project Switching**: You do **not** need to hardcode your novel path in configuration args. Once the server starts, the AI agent can set or switch projects at runtime using `story_set_project`.
+> **💡 Zero-Config Project Switching**: Bạn **không** bắt buộc phải cố định đường dẫn novel project trong tham số khởi động. Khi server chạy, AI có thể tự chọn hoặc chuyển đổi dự án tại runtime bằng tool `story_set_project`.
 
 ### Claude Desktop (`claude_desktop_config.json`)
 
@@ -164,29 +185,14 @@ Add `story-architect-mcp` to your favorite MCP client configuration.
 }
 ```
 
-### Antigravity / Cursor / Windsurf / VS Code (`mcp.json`)
-
-```json
-{
-  "mcpServers": {
-    "story-architect": {
-      "command": "node",
-      "args": ["/absolute/path/to/story-architect-mcp/dist/index.js"]
-    }
-  }
-}
-```
-
-### Initializing Default Path via CLI Argument (Optional)
-
-If you prefer to load a specific project on server startup, pass the directory as a CLI argument:
+### Antigravity / Cursor / Windsurf / VS Code (`mcp.json` / `cline_mcp_settings.json`)
 
 ```json
 {
   "mcpServers": {
     "story-architect": {
       "command": "npx",
-      "args": ["-y", "story-architect-mcp", "/path/to/your/novel-project"]
+      "args": ["-y", "story-architect-mcp"]
     }
   }
 }
@@ -203,7 +209,7 @@ If you prefer to load a specific project on server startup, pass the directory a
 |---|---|---|
 | `story_set_project` | `projectPath` | Sets or switches the target novel project directory dynamically at runtime. |
 | `story_get_project_info` | *none* | Returns status, path, configuration, and word count of the active project. |
-| `story_init` | `template`, `title`, `author`, `genre`, `pov`, `tense` | Initializes project directory with predefined genre templates (`fantasy-epic`, `mystery-thriller`, `romance-modern`). |
+| `story_init` | `template`, `title`, `author`, `genre`, `pov`, `tense` | Initializes project directory with predefined genre templates. |
 | `story_stats` | *none* | Computes total manuscript word count, writing velocity, and estimated completion date. |
 
 #### 🔹 Rescue & Refactoring Suite
@@ -239,7 +245,7 @@ If you prefer to load a specific project on server startup, pass the directory a
 | `story_analyze_sentiment` | `arc`, `chapter`, `windowSize`, `compareToStyleGuide` | Analyzes chapter/arc sentiment, dominant emotions, tone classification, emotional arcs, and detects tone drift. |
 | `story_track_emotion` | `text` | Standalone emotion and tone tracker for quick drafting feedback on arbitrary text passages. |
 | `story_generate_writing_prompt` | `target_chapter_id`, `strategy` | Compiles lore, outlines, recent endings, and style rules into an optimized prompt. |
-| `story_export` | `format`, `output_path`, `include_outline` | Compiles manuscript into Markdown, HTML, EPUB, or DOCX formats (PDF via HTML print-to-PDF). |
+| `story_export` | `format`, `output_path`, `include_outline` | Compiles manuscript into Markdown, HTML, EPUB, or DOCX formats. |
 
 ---
 
@@ -284,18 +290,6 @@ Writing a novel takes months or years; `story-architect-mcp` is designed with st
 1. **Dry-Run Mode First (`confirm: false`)**: All destructive or structural refactoring tools run in Preview mode by default. You can inspect exact proposed file moves and edits before confirming execution (`confirm: true`).
 2. **Automated Pre-Refactor Snapshots**: Executing structural changes automatically triggers `story_snapshot` to create a rollback checkpoint prior to file operations.
 3. **Transparent File Formats**: All metadata is stored as standard JSON in `.story/`, and all story content is stored in plain Markdown with YAML frontmatter—ensuring zero vendor lock-in.
-
----
-
-## 🤝 Contributing
-
-Contributions, bug reports, and feature requests are welcome!
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ---
 
