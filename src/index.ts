@@ -33,6 +33,8 @@ import { registerQueryContextTool } from './tools/graph/queryContext.js';
 import { registerDetectTimelineTool } from './tools/analysis/detectTimeline.js';
 import { registerAnalyzePacingTool } from './tools/analysis/analyzePacing.js';
 import { registerAnalyzeVoiceTool } from './tools/analysis/analyzeVoice.js';
+import { registerAnalyzeSentimentTool } from './tools/analysis/analyzeSentiment.js';
+import { registerTrackEmotionTool } from './tools/analysis/trackEmotion.js';
 
 // Tools: Generator Suite (Phase 5)
 import { registerGenerateWritingPromptTool } from './tools/generatePrompt.js';
@@ -95,13 +97,15 @@ registerQueryContextTool(server, getProject);
 registerDetectTimelineTool(server, getProject);
 registerAnalyzePacingTool(server, getProject);
 registerAnalyzeVoiceTool(server, getProject);
+registerAnalyzeSentimentTool(server, getProject);
+registerTrackEmotionTool(server);
 
 registerGenerateWritingPromptTool(server, getProject);
 
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`[story-architect-mcp] Server started with 21 tools, 6 static resources, 3 templates, and 5 prompts.`);
+  console.error(`[story-architect-mcp] Server started with 23 tools, 7 static resources, 3 templates, and 5 prompts.`);
   if (initialPath) {
     console.error(`[story-architect-mcp] Initial Project Path: ${path.resolve(initialPath)}`);
   } else {

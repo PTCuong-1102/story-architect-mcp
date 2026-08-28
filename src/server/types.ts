@@ -146,9 +146,75 @@ export const StyleGuideSchema = z.object({
   avoidWords: z.array(z.string()).default([]),
   preferWords: z.array(z.string()).default([]),
   samplePassages: z.array(z.string()).default([]).describe('Đoạn văn mẫu tham chiếu'),
+  // Sentiment & Tone guidelines
+  expectedTone: z.string().optional()
+    .describe('Giọng văn kỳ vọng tổng thể (ví dụ: "u ám và căng thẳng")'),
+  expectedEmotionalArc: z.enum([
+    'rising',           // Tăng dần (từ tiêu cực → tích cực)
+    'falling',          // Giảm dần (từ tích cực → tiêu cực)
+    'man-in-a-hole',    // Tích cực → rơi → phục hồi
+    'icarus',           // Tăng → đỉnh → rơi
+    'cinderella',       // Tích cực → rơi → phục hồi → happy end
+    'oedipus',          // Rơi → phục hồi → rơi tiếp
+    'custom',
+  ]).optional()
+    .describe('Pattern emotional arc kỳ vọng cho toàn bộ tác phẩm'),
+  emotionBalance: z.object({
+    maxNegativeStreak: z.number().optional()
+      .describe('Số chương tiêu cực liên tục tối đa trước khi cảnh báo'),
+    polarityRange: z.tuple([z.number(), z.number()]).optional()
+      .describe('Phạm vi polarity chấp nhận được [-0.8, 0.5]'),
+  }).optional(),
   updatedAt: z.string().default(() => new Date().toISOString()),
 });
 export type StyleGuide = z.infer<typeof StyleGuideSchema>;
+
+// ============================================================
+// Sentiment & Emotion Analysis
+// ============================================================
+
+export const EmotionScoresSchema = z.object({
+  joy: z.number().default(0),
+  trust: z.number().default(0),
+  fear: z.number().default(0),
+  surprise: z.number().default(0),
+  sadness: z.number().default(0),
+  disgust: z.number().default(0),
+  anger: z.number().default(0),
+  anticipation: z.number().default(0),
+});
+export type EmotionScoresType = z.infer<typeof EmotionScoresSchema>;
+
+export const ChapterSentimentSchema = z.object({
+  chapter: z.string(),
+  polarity: z.number(),
+  dominantEmotion: z.string(),
+  dominantTone: z.string(),
+  emotions: EmotionScoresSchema,
+  emotionalArc: z.array(z.object({
+    position: z.number(),
+    polarity: z.number(),
+    dominantEmotion: z.string(),
+  })).default([]),
+  alerts: z.array(z.string()).default([]),
+});
+export type ChapterSentiment = z.infer<typeof ChapterSentimentSchema>;
+
+export const SentimentCacheSchema = z.object({
+  arc: z.string(),
+  chapters: z.array(ChapterSentimentSchema).default([]),
+  overallPolarity: z.number().default(0),
+  overallTone: z.string().default('trung_tinh'),
+  toneDriftAlerts: z.array(z.object({
+    fromChapter: z.string(),
+    toChapter: z.string(),
+    fromTone: z.string(),
+    toTone: z.string(),
+    severity: z.enum(['info', 'warning', 'critical']),
+  })).default([]),
+  analyzedAt: z.string().default(() => new Date().toISOString()),
+});
+export type SentimentCache = z.infer<typeof SentimentCacheSchema>;
 
 // ============================================================
 // Character Profile (bible/characters/)

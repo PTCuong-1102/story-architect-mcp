@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import { StoryProject } from '../server/StoryProject.js';
 import { readTextFile, isSafePathSegment } from '../utils/fileUtils.js';
+import { TONE_LABELS, polarityLabel, type ToneCategory } from '../utils/sentimentLexicon.js';
 import { errResult } from '../utils/mcpResults.js';
 
 export function registerGenerateWritingPromptTool(server: McpServer, getProject: () => StoryProject): void {
@@ -53,6 +54,40 @@ export function registerGenerateWritingPromptTool(server: McpServer, getProject:
         .map(i => `- [${i.importance}] ${i.setup}`)
         .join('\n');
 
+      // Sentiment context from cache
+      const emotionsCache = await project.getSentimentCache();
+      let sentimentContext = '';
+      if (emotionsCache && emotionsCache.chapters.length > 0) {
+        const lastChSentiment = emotionsCache.chapters[emotionsCache.chapters.length - 1];
+        const lastToneLabel = TONE_LABELS[lastChSentiment.dominantTone as ToneCategory] || lastChSentiment.dominantTone;
+        sentimentContext = `\n[BỐI CẢNH CẢM XÚC (từ story_analyze_sentiment)]\nGiọng văn chương trước: ${lastToneLabel} (polarity: ${lastChSentiment.polarity.toFixed(2)})\nCảm xúc chủ đạo chương trước: ${lastChSentiment.dominantEmotion}`;
+
+        // Emotional arc guidance
+        if (styleGuide.expectedEmotionalArc) {
+          const totalChapters = emotionsCache.chapters.length;
+          const progress = totalChapters > 0 ? (totalChapters / Math.max(totalChapters + 3, 10)) : 0;
+          const arcType = styleGuide.expectedEmotionalArc;
+          let arcGuidance = '';
+
+          if (arcType === 'rising') {
+            const targetPolarity = -0.3 + (progress * 1.0);
+            arcGuidance = `Theo arc "Rising": polarity nên tăng dần. Target: ~${targetPolarity.toFixed(1)}`;
+          } else if (arcType === 'man-in-a-hole') {
+            if (progress < 0.3) arcGuidance = 'Theo arc "Man in a Hole": giai đoạn giới thiệu tích cực.';
+            else if (progress < 0.7) arcGuidance = 'Theo arc "Man in a Hole": giai đoạn khủng hoảng/rơi xuống.';
+            else arcGuidance = 'Theo arc "Man in a Hole": giai đoạn phục hồi và vươn lên.';
+          } else if (arcType === 'icarus') {
+            if (progress < 0.5) arcGuidance = 'Theo arc "Icarus": giai đoạn bay lên, tích cực tăng dần.';
+            else arcGuidance = 'Theo arc "Icarus": giai đoạn rơi, polarity chuyển tiêu cực.';
+          }
+          sentimentContext += `\n${arcGuidance}`;
+        }
+
+        if (styleGuide.expectedTone) {
+          sentimentContext += `\nGiọng văn kỳ vọng: ${styleGuide.expectedTone}`;
+        }
+      }
+
       let strategyInstruction = '';
       switch (params.strategy) {
         case 'continue':
@@ -78,6 +113,7 @@ Thì: ${config.tense === 'past' ? 'Quá khứ' : 'Hiện tại'}
 [QUY CHUẨN GIỌNG VĂN]
 ${styleGuide.voiceDescription || '_Giữ văn phong mượt mà, cuốn hút._'}
 ${styleGuide.avoidWords.length > 0 ? `Từ cần tránh: ${styleGuide.avoidWords.join(', ')}` : ''}
+${sentimentContext}
 
 [CHI TIẾT CÀI CẮM CẦN GIẢI GỠ (CHEKHOV GUNS)]
 ${unfired || '_Không có._'}

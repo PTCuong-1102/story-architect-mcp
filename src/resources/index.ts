@@ -121,6 +121,33 @@ export function registerResources(server: McpServer, getProject: () => StoryProj
     }
   );
 
+  // ─── story://emotions ───
+  server.registerResource(
+    'story-emotions',
+    'story://emotions',
+    { title: 'Emotion Analysis', description: 'Bản tóm tắt cảm xúc & giọng văn (cached từ story_analyze_sentiment)', mimeType: 'application/json' },
+    async () => {
+      const project = getProject();
+      const cache = await project.getSentimentCache();
+      if (!cache) {
+        return {
+          contents: [{
+            uri: 'story://emotions',
+            mimeType: 'application/json',
+            text: JSON.stringify({ message: 'Chưa có dữ liệu sentiment. Hãy chạy story_analyze_sentiment trước.' }, null, 2),
+          }],
+        };
+      }
+      return {
+        contents: [{
+          uri: 'story://emotions',
+          mimeType: 'application/json',
+          text: JSON.stringify(cache, null, 2),
+        }],
+      };
+    }
+  );
+
   // ─── story://bible/characters/{name} (Resource Template) ───
   server.registerResource(
     'character-profile',

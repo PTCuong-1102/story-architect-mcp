@@ -28,8 +28,8 @@ flowchart TD
     end
 
     subgraph MCP["story-architect-mcp Server"]
-        Tools["21 MCP Tools"]
-        Res["6 Resources & 3 Templates"]
+        Tools["23 MCP Tools"]
+        Res["7 Resources & 3 Templates"]
         Prompts["5 Workflow Prompts"]
     end
 
@@ -76,9 +76,10 @@ flowchart TD
 * **Dynamic Relationship Graph (`story_map_relationships`)**: Tracks changing relationships between characters across chapters into `.story/relationships.json` — can be auto-detected from manuscript co-occurrences or updated manually.
 * **Token-Budget Context Querying (`story_query_context`)**: Generates optimized context packages for LLMs by combining graph memory traversal with token budget constraints.
 
-### 📈 4. Pacing, Voice Drift & Analytics
+### 📈 4. Pacing, Voice, Sentiment & Analytics
 * **Pacing Inspector (`story_analyze_pacing`)**: Measures Action / Dialogue / Description distribution and scene tension curves across chapters.
-* **Voice Drift Monitor (`story_analyze_voice`)**: Evaluates sentence complexity, vocabulary richness, and POV/tense compliance against your `.story/style_guide.json`.
+* **Voice Drift Monitor (`story_analyze_voice`)**: Evaluates sentence complexity, vocabulary richness, POV/tense compliance, and dominant emotions against your `.story/style_guide.json`.
+* **Sentiment & Tone Analyzer (`story_analyze_sentiment` / `story_track_emotion`)**: Performs lexicon-based emotional arc tracking, polarity calculation, tone classification (8 categories), and tone drift detection across chapters.
 * **Writing Statistics (`story_stats`)**: Real-time word counts, writing velocity, and estimated project completion dates.
 
 ### ✍️ 5. AI Prompt Generator & Manuscript Export
@@ -195,7 +196,7 @@ If you prefer to load a specific project on server startup, pass the directory a
 
 ## 🛠️ MCP API Reference
 
-### 1. MCP Tools (21 Tools)
+### 1. MCP Tools (23 Tools)
 
 #### 🔹 Project & Structure Management
 | Tool Name | Key Parameters | Description |
@@ -235,12 +236,14 @@ If you prefer to load a specific project on server startup, pass the directory a
 | `story_detect_timeline_conflicts` | `arc_id` | Audits event chronology for conflicts and renders a Mermaid Gantt timeline. |
 | `story_analyze_pacing` | `chapter_range` | Computes Action / Dialogue / Description ratio and scene tension curves. |
 | `story_analyze_voice` | `chapter_range` | Checks sentence length, vocabulary richness, and POV/tense compliance against style guide. |
+| `story_analyze_sentiment` | `arc`, `chapter`, `windowSize`, `compareToStyleGuide` | Analyzes chapter/arc sentiment, dominant emotions, tone classification, emotional arcs, and detects tone drift. |
+| `story_track_emotion` | `text` | Standalone emotion and tone tracker for quick drafting feedback on arbitrary text passages. |
 | `story_generate_writing_prompt` | `target_chapter_id`, `strategy` | Compiles lore, outlines, recent endings, and style rules into an optimized prompt. |
 | `story_export` | `format`, `output_path`, `include_outline` | Compiles manuscript into Markdown, HTML, EPUB, or DOCX formats (PDF via HTML print-to-PDF). |
 
 ---
 
-### 2. MCP Resources (6 Static & 3 Templates)
+### 2. MCP Resources (7 Static & 3 Templates)
 
 #### Static Resources
 | Resource URI | Description | MIME Type |
@@ -251,6 +254,7 @@ If you prefer to load a specific project on server startup, pass the directory a
 | `story://holes` | List of unresolved plot holes and continuity warnings | `application/json` |
 | `story://foreshadowing` | Unfired Chekhov's guns and foreshadowing setups | `application/json` |
 | `story://relationships` | Character relationship matrix and interaction states | `application/json` |
+| `story://emotions` | Project-wide cached sentiment and emotional arc summary | `application/json` |
 
 #### Resource Templates
 | Template URI | Description | MIME Type |

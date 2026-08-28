@@ -55,6 +55,8 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
 - Chạy `story_stats` để thống kê số từ, số nhân vật, và số lượng thực thể.
 - Chạy `story_analyze_pacing` để đánh giá nhịp độ chương truyện.
 - Chạy `story_analyze_voice` để kiểm tra tính đồng nhất của giọng văn và tỷ lệ hội thoại.
+- Chạy `story_analyze_sentiment` để phân tích đường cong cảm xúc (emotional arc), polarity, và phát hiện tone drift.
+- Chạy `story_track_emotion` nếu cần kiểm tra nhanh cảm xúc của từng phân cảnh ngắn trong lúc nháp.
 - Chạy `story_detect_timeline_conflicts` hoặc kiểm tra `story_log_plot_hole` nếu phát hiện điểm vô lý.
 
 ---
@@ -73,7 +75,9 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
 | | `story_log_plot_hole` | Ghi nhận & theo dõi lỗ hổng cốt truyện |
 | | `story_resolve_plot_hole` | Đánh dấu đã khắc phục lỗ hổng |
 | **Phân tích Chất lượng**| `story_analyze_pacing` | Phân tích nhịp độ chương truyện |
-| | `story_analyze_voice` | Đánh giá giọng văn, tone & tỷ lệ thoại |
+| | `story_analyze_voice` | Đánh giá giọng văn, tone, POV & drift |
+| | `story_analyze_sentiment` | Phân tích cảm xúc, polarity, emotional arc & tone drift |
+| | `story_track_emotion` | Phân tích nhanh cảm xúc/tone của đoạn văn bản ngắn |
 | | `story_stats` | Thống kê từ vựng, độ dài, thực thể |
 | **Sáng tạo & Quản lý**| `story_generate_writing_prompt` | Gợi ý ý tưởng / Viết prompt gợi mở phân cảnh |
 | | `story_set_project` / `story_init` | Thao tác dự án |

@@ -18,6 +18,7 @@ import {
   ForeshadowingFileSchema,
   RelationshipsFileSchema,
   StyleGuideSchema,
+  SentimentCacheSchema,
   type StoryConfig,
   type StoryStatus,
   type Timeline,
@@ -25,6 +26,7 @@ import {
   type ForeshadowingFile,
   type RelationshipsFile,
   type StyleGuide,
+  type SentimentCache,
   type CharacterProfile,
   type WorldEntry,
 } from './types.js';
@@ -62,6 +64,7 @@ export class StoryProject {
   private relationshipsPath() { return path.join(this.storyDir, 'relationships.json'); }
   private styleGuidePath() { return path.join(this.storyDir, 'style_guide.json'); }
   private snapshotsDir() { return path.join(this.storyDir, 'snapshots'); }
+  private emotionsCachePath() { return path.join(this.storyDir, 'emotions_cache.json'); }
 
   // ====== Validation ======
 
@@ -376,6 +379,18 @@ export class StoryProject {
       `# Chủ đề & Motif\n\n_Liệt kê các chủ đề xuyên suốt tác phẩm._\n`,
       'utf-8'
     );
+  }
+
+  // ====== Sentiment Cache ======
+
+  async getSentimentCache(): Promise<SentimentCache | null> {
+    const raw = await readJsonFile<unknown>(this.emotionsCachePath());
+    if (!raw) return null;
+    return SentimentCacheSchema.parse(raw);
+  }
+
+  async saveSentimentCache(data: SentimentCache): Promise<void> {
+    await writeJsonFile(this.emotionsCachePath(), { ...data, analyzedAt: new Date().toISOString() });
   }
 
   // ====== Snapshots Dir ======
