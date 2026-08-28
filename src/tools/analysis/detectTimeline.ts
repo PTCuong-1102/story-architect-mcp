@@ -31,47 +31,33 @@ function parseAbsoluteDate(value?: string): Date | null {
 }
 
 /**
- * Sinh mã Mermaid Gantt Chart từ danh sách sự kiện timeline.
- * Ưu tiên absoluteDate khi có; nếu không sẽ xếp theo relativeOrder từ BASE_DATE.
+ * Sinh mã Mermaid Flowchart từ danh sách sự kiện timeline.
+ * Ưu tiên absoluteDate khi có; sắp xếp theo relativeOrder.
  */
-function generateMermaidGantt(events: TimelineEvent[]): string {
+function generateMermaidTimeline(events: TimelineEvent[]): string {
   if (events.length === 0) {
-    return '```mermaid\ngantt\n    title Timeline Truyện\n    dateFormat YYYY-MM-DD\n    section Chưa có sự kiện\n    Khởi đầu : milestone, m1, 2026-01-01, 1d\n```';
+    return '```mermaid\nflowchart LR\n    Start["Chưa có sự kiện timeline"]\n```';
   }
 
   const lines: string[] = [
     '```mermaid',
-    'gantt',
-    '    title Tiến trình Sự kiện (Timeline)',
-    '    dateFormat YYYY-MM-DD',
-    '    axisFormat %d/%m',
-    '    section Sự kiện chính',
+    'flowchart LR',
   ];
 
   // Sắp xếp theo relativeOrder
   const sorted = [...events].sort((a, b) => a.relativeOrder - b.relativeOrder);
 
-  let cursor = new Date(BASE_DATE);
-
   sorted.forEach((e, idx) => {
     const idStr = `evt_${idx + 1}`;
-    const label = e.label.replace(/[:#]/g, '');
-    const duration = '2d';
+    const cleanLabel = e.label.replace(/["\n]/g, "'");
+    const dateStr = e.absoluteDate ? `📅 ${e.absoluteDate}` : `Thứ tự #${e.relativeOrder}`;
+    const chStr = e.chapter ? `<br/>📖 ${e.chapter}` : '';
+    lines.push(`    ${idStr}["<b>${cleanLabel}</b><br/>${dateStr}${chStr}"]`);
 
-    // Nếu có absoluteDate hợp lệ → đặt đúng mốc đó
-    const abs = parseAbsoluteDate(e.absoluteDate);
-
-    if (idx === 0 || abs) {
-      const dateStr = abs
-        ? abs.toISOString().split('T')[0]
-        : cursor.toISOString().split('T')[0];
-      lines.push(`    ${label} :active, ${idStr}, ${dateStr}, ${duration}`);
-    } else {
+    if (idx > 0) {
       const prevId = `evt_${idx}`;
-      lines.push(`    ${label} : ${idStr}, after ${prevId}, ${duration}`);
+      lines.push(`    ${prevId} --> ${idStr}`);
     }
-
-    cursor = new Date(cursor.getTime() + STEP_MS);
   });
 
   lines.push('```');
@@ -82,8 +68,8 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
   server.registerTool(
     'story_detect_timeline_conflicts',
     {
-      title: 'Detect Timeline Conflicts & Generate Mermaid Gantt',
-      description: 'Phân tích các mốc thời gian tuyệt đối & tương đối, sự kiện để phát hiện mâu thuẫn timeline. Xuất Mermaid Gantt Chart trực quan hóa.',
+      title: 'Detect Timeline Conflicts & Generate Mermaid Timeline',
+      description: 'Phân tích các mốc thời gian tuyệt đối & tương đối, sự kiện để phát hiện mâu thuẫn timeline. Xuất Mermaid Flowchart trực quan hóa.',
       inputSchema: z.object({
         addEvent: z.object({
           label: z.string().describe('Tên sự kiện'),
@@ -151,22 +137,22 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
         }
       }
 
-      const mermaidDiagram = generateMermaidGantt(events);
+      const mermaidDiagram = generateMermaidTimeline(events);
 
       return {
         content: [{
           type: 'text' as const,
-          text: `📊 Phân tích Timeline & Mermaid Gantt Chart
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📅 Tổng số sự kiện: ${events.length}
-${conflicts.length > 0 ? '❌ Mâu thuẫn phát hiện:\n' + conflicts.join('\n') : '✅ Không phát hiện mâu thuẫn thời gian nào!'}
-
-🎨 Trực quan hóa (Mermaid Gantt):
-${mermaidDiagram}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+          text: `📊 Phân tích Timeline & Mermaid Flowchart
+ 
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 
+ 📅 Tổng số sự kiện: ${events.length}
+ ${conflicts.length > 0 ? '❌ Mâu thuẫn phát hiện:\n' + conflicts.join('\n') : '✅ Không phát hiện mâu thuẫn thời gian nào!'}
+ 
+ 🎨 Trực quan hóa (Mermaid Flowchart):
+ ${mermaidDiagram}
+ 
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
         }],
       };
     }

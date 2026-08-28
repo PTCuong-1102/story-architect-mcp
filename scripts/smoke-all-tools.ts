@@ -168,6 +168,10 @@ async function main() {
   const extractId = (text: string): string | null => (text.match(/ID: (\S+)/) || [])[1] || null;
   const okText = (t: string) => !t.includes('❌') && !t.includes('⚠️') ? '' : '';
 
+  let holeId: string | null = null;
+  let setupId: string | null = null;
+  let snapId: string | null = null;
+
   // ══════════ TOOLS ══════════
   {
     const r = await call(client, 'story_set_project', { projectPath: novelDir });
@@ -194,24 +198,24 @@ async function main() {
   }
   {
     const r = await call(client, 'story_log_plot_hole', { title: 'Tuổi không khớp', description: 'Nhân vật A 16 tuổi nhưng chương 1 nói 18.', severity: 'high', chapters: ['arc_01/ch_001'] });
-    globalThis.holeId = extractId(r.text);
-    r.isError || !globalThis.holeId ? report('story_log_plot_hole', 'FAIL', r.text.slice(0, 300)) : report('story_log_plot_hole', 'PASS');
+    holeId = extractId(r.text);
+    r.isError || !holeId ? report('story_log_plot_hole', 'FAIL', r.text.slice(0, 300)) : report('story_log_plot_hole', 'PASS');
   }
   {
-    const r = await call(client, 'story_resolve_plot_hole', { id: globalThis.holeId, resolution: 'Đã sửa lại tuổi thành 18 thống nhất.', status: 'resolved' });
+    const r = await call(client, 'story_resolve_plot_hole', { id: holeId, resolution: 'Đã sửa lại tuổi thành 18 thống nhất.', status: 'resolved' });
     r.isError || r.text.includes('❌') ? report('story_resolve_plot_hole', 'FAIL', r.text.slice(0, 300)) : report('story_resolve_plot_hole', 'PASS');
   }
   {
     const r = await call(client, 'story_log_setup', { setup: 'Áo bào rách của sư phụ', setupChapter: 'arc_01/ch_001', setupLine: 'tấm áo bạc màu', importance: 'major' });
-    globalThis.setupId = extractId(r.text);
-    r.isError || !globalThis.setupId ? report('story_log_setup', 'FAIL', r.text.slice(0, 300)) : report('story_log_setup', 'PASS');
+    setupId = extractId(r.text);
+    r.isError || !setupId ? report('story_log_setup', 'FAIL', r.text.slice(0, 300)) : report('story_log_setup', 'PASS');
   }
   {
     const r = await call(client, 'story_list_unfired', {});
     r.isError || r.text.includes('❌') ? report('story_list_unfired', 'FAIL', r.text.slice(0, 200)) : report('story_list_unfired', 'PASS');
   }
   {
-    const r = await call(client, 'story_log_payoff', { id: globalThis.setupId, payoff: 'Nàng mặc lại tấm áo trong trận quyết đấu.', payoffChapter: 'arc_02/ch_001' });
+    const r = await call(client, 'story_log_payoff', { id: setupId, payoff: 'Nàng mặc lại tấm áo trong trận quyết đấu.', payoffChapter: 'arc_02/ch_001' });
     r.isError || r.text.includes('❌') ? report('story_log_payoff', 'FAIL', r.text.slice(0, 300)) : report('story_log_payoff', 'PASS');
   }
   {
@@ -231,7 +235,7 @@ async function main() {
   {
     const r1 = await call(client, 'story_detect_timeline_conflicts', {});
     const r2 = await call(client, 'story_detect_timeline_conflicts', { addEvent: { label: 'Về thôn cũ', chapter: 'arc_02/ch_001', absoluteDate: '2026-03-10', relativeOrder: 3 } });
-    (r1.isError || r2.isError) ? report('story_detect_timeline_conflicts', 'FAIL', (r1.text + r2.text).slice(0, 400)) : report('story_detect_timeline_conflicts', 'PASS', r1.text.includes('mermaid') ? 'gantt ok' : 'no mermaid?');
+    (r1.isError || r2.isError) ? report('story_detect_timeline_conflicts', 'FAIL', (r1.text + r2.text).slice(0, 400)) : report('story_detect_timeline_conflicts', 'PASS', r1.text.includes('mermaid') ? 'flowchart timeline ok' : 'no mermaid?');
   }
   {
     const r = await call(client, 'story_analyze_pacing', { arc: 'arc_01' });
@@ -252,12 +256,12 @@ async function main() {
   }
   {
     const r = await call(client, 'story_snapshot', { label: 'smoke', description: 'snapshot kiểm thử' });
-    globalThis.snapId = extractId(r.text);
-    r.isError || !globalThis.snapId ? report('story_snapshot', 'FAIL', r.text.slice(0, 300)) : report('story_snapshot', 'PASS');
+    snapId = extractId(r.text);
+    r.isError || !snapId ? report('story_snapshot', 'FAIL', r.text.slice(0, 300)) : report('story_snapshot', 'PASS');
   }
   {
-    const prev = await call(client, 'story_rollback', { snapshotId: globalThis.snapId, confirm: false });
-    const exec = await call(client, 'story_rollback', { snapshotId: globalThis.snapId, confirm: true });
+    const prev = await call(client, 'story_rollback', { snapshotId: snapId, confirm: false });
+    const exec = await call(client, 'story_rollback', { snapshotId: snapId, confirm: true });
     (prev.isError || exec.isError || !exec.text.includes('Rollback hoàn tất')) ? report('story_rollback', 'FAIL', (prev.text + exec.text).slice(0, 400)) : report('story_rollback', 'PASS');
   }
   {

@@ -84,6 +84,24 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
 
 ---
 
+## 📊 QUY CHUẨN TRỰC QUAN HÓA MERMAID (MERMAID RENDERING RULES)
+
+Khi xuất biểu đồ trực quan hóa (quan hệ nhân vật, tiến trình sự kiện, diễn biến tâm lý, hồi kịch bản), **BẮT BUỘC** tuân thủ các loại biểu đồ được hỗ trợ:
+
+- ✅ **Các header Mermaid ĐƯỢC HỖ TRỢ:**
+  - `flowchart LR` / `flowchart TD` (hoặc `graph TD` / `graph LR`): Đồ thị quan hệ, tiến trình sự kiện (timeline), sơ đồ phân cảnh.
+  - `stateDiagram-v2`: Chuyển đổi trạng thái nhân vật, phe phái, bảo vật.
+  - `sequenceDiagram`: Tương tác, đối thoại hoặc trình tự hành động giữa các nhân vật.
+  - `classDiagram` / `erDiagram`: Cấu trúc thực thể, thuộc tính nhân vật, bang hội.
+  - `xychart-beta`: Biểu đồ đường/cột thể hiện đường cong cảm xúc (emotional arc), nhịp độ hoặc polarity.
+
+- ❌ **TUYỆT ĐỐI KHÔNG SỬ DỤNG các header:** `journey`, `gantt`, `pie`, `gitGraph`, `mindmap`, `quadrantChart` (gây lỗi `Invalid mermaid header`).
+- 💡 **Cách thay thế:**
+  - Thay vì `journey` → Dùng `flowchart LR` hoặc `stateDiagram-v2` hoặc `xychart-beta`.
+  - Thay vì `gantt` → Dùng `flowchart LR` với các node dạng `A["<b>Sự kiện</b><br/>📅 2026-01-01"] --> B["<b>Sự kiện tiếp</b>"]`.
+
+---
+
 ## 💡 VÍ DỤ MINH HỌA QUY TRÌNH (EXAMPLE WORKFLOW)
 
 **Yêu cầu:** "Hãy viết Chương 5: Cuộc chạm trán tại quán rượu Hắc Phong."

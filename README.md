@@ -69,7 +69,7 @@ flowchart TD
 ### 🔍 2. Continuity Auditing & Plot Hole Tracking
 * **Plot Hole Manager (`story_log_plot_hole` / `story_resolve_plot_hole`)**: Tracks unresolved plot holes, severity levels, and proposed fixes directly in `.story/unresolved_holes.json`.
 * **Chekhov’s Gun Tracker (`story_log_setup` / `story_log_payoff`)**: Ensures planted clues or foreshadowed events are resolved before the story concludes.
-* **Timeline Conflict Detector (`story_detect_timeline_conflicts`)**: Audits character ages, event order, and absolute dates, generating interactive **Mermaid Gantt Charts**.
+* **Timeline Conflict Detector (`story_detect_timeline_conflicts`)**: Audits character ages, event order, and absolute dates, generating interactive **Mermaid Flowchart Timeline Diagrams**.
 
 ### 🧠 3. Knowledge Graph & Story Bible Integration
 * **Automatic Entity Extraction (`story_extract_entities_to_bible`)**: Parses chapter drafts to automatically create structured Markdown profiles in `bible/characters/` and `bible/world/`.
