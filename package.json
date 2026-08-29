@@ -1,6 +1,6 @@
 {
   "name": "story-architect-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A Model Context Protocol (MCP) Server for AI-assisted long-form fiction writing, worldbuilding, continuity auditing, and novel architecture.",
   "type": "module",
   "main": "dist/index.js",
@@ -18,42 +18,36 @@
     "writing",
     "story",
     "worldbuilding",
+    "novel-as-code",
+    "creative-writing",
+    "epub",
+    "docx",
     "fiction",
-    "ai",
-    "claude",
+    "claude-desktop",
     "cursor"
   ],
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "start": "node dist/index.js",
-    "setup": "node dist/index.js setup",
-    "doctor": "node dist/index.js doctor",
-    "init-novel": "node dist/index.js init-novel",
-    "test": "tsx --test test/*.test.ts",
-    "prepare": "npm run build"
-  },
-  "files": [
-    "dist",
-    "scripts",
-    ".agents"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
+  "author": "Phan Thanh Cuong",
   "license": "MIT",
   "engines": {
     "node": ">=20.0.0"
   },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "clean": "rm -rf dist",
+    "watch": "tsc --watch",
+    "test": "tsx --test test/*.test.ts",
+    "start": "node dist/index.js",
+    "doctor": "node dist/index.js doctor"
+  },
   "dependencies": {
-    "@modelcontextprotocol/server": "^2.0.0",
-    "glob": "^11.0.0",
+    "@modelcontextprotocol/server": "^1.11.0",
     "gray-matter": "^4.0.3",
-    "zod": "^4.0.0"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "tsx": "^4.23.5",
-    "typescript": "^5.7.0"
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.4.5"
   }
 }

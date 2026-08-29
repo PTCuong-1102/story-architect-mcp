@@ -46,7 +46,7 @@ export function registerResources(server: McpServer, getProject: () => StoryProj
   server.registerResource(
     'story-timeline',
     'story://timeline',
-    { title: 'Story Timeline', description: 'Timeline tổng thể câu chuyện', mimeType: 'application/json' },
+    { title: 'Story Timeline', description: 'Timeline tổng thể câu chuyện & các tuyến song song', mimeType: 'application/json' },
     async () => {
       const project = getProject();
       const timeline = await project.getTimeline();
@@ -55,6 +55,24 @@ export function registerResources(server: McpServer, getProject: () => StoryProj
           uri: 'story://timeline',
           mimeType: 'application/json',
           text: JSON.stringify(timeline, null, 2),
+        }],
+      };
+    }
+  );
+
+  // ─── story://character-states ───
+  server.registerResource(
+    'story-character-states',
+    'story://character-states',
+    { title: 'Character States & Inventory', description: 'Trạng thái vị trí, hành trang và tình trạng nhân vật theo thời gian', mimeType: 'application/json' },
+    async () => {
+      const project = getProject();
+      const data = await project.getCharacterStates();
+      return {
+        contents: [{
+          uri: 'story://character-states',
+          mimeType: 'application/json',
+          text: JSON.stringify(data, null, 2),
         }],
       };
     }
@@ -199,6 +217,25 @@ export function registerResources(server: McpServer, getProject: () => StoryProj
           uri: uri.href,
           mimeType: 'text/markdown',
           text: content,
+        }],
+      };
+    }
+  );
+
+  // ─── story://character-states/{name} (Resource Template) ───
+  server.registerResource(
+    'character-state-by-name',
+    new ResourceTemplate('story://character-states/{name}', { list: undefined }),
+    { title: 'Character State Snapshot', description: 'Trạng thái vị trí và hành trang mới nhất của nhân vật', mimeType: 'application/json' },
+    async (uri, params) => {
+      const project = getProject();
+      const name = params.name as string;
+      const state = await project.getLatestCharacterState(name);
+      return {
+        contents: [{
+          uri: uri.href,
+          mimeType: 'application/json',
+          text: JSON.stringify(state || { message: `Chưa có trạng thái cho nhân vật ${name}` }, null, 2),
         }],
       };
     }

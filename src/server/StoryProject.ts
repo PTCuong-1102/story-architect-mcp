@@ -17,6 +17,7 @@ import {
   PlotHolesFileSchema,
   ForeshadowingFileSchema,
   RelationshipsFileSchema,
+  CharacterStatesFileSchema,
   StyleGuideSchema,
   SentimentCacheSchema,
   type StoryConfig,
@@ -25,6 +26,8 @@ import {
   type PlotHolesFile,
   type ForeshadowingFile,
   type RelationshipsFile,
+  type CharacterStatesFile,
+  type CharacterStateSnapshot,
   type StyleGuide,
   type SentimentCache,
   type CharacterProfile,
@@ -62,6 +65,7 @@ export class StoryProject {
   private holesPath() { return path.join(this.storyDir, 'unresolved_holes.json'); }
   private foreshadowingPath() { return path.join(this.storyDir, 'foreshadowing.json'); }
   private relationshipsPath() { return path.join(this.storyDir, 'relationships.json'); }
+  private characterStatesPath() { return path.join(this.storyDir, 'character_states.json'); }
   private styleGuidePath() { return path.join(this.storyDir, 'style_guide.json'); }
   private snapshotsDir() { return path.join(this.storyDir, 'snapshots'); }
   private emotionsCachePath() { return path.join(this.storyDir, 'emotions_cache.json'); }
@@ -127,7 +131,7 @@ export class StoryProject {
    * thì bổ sung entry vào writingLog và cập nhật lastWrittenAt.
    * Trả về status đã lưu (dùng để tính writing velocity).
    */
-  async recordWritingProgress(): Promise<StoryStatus> {
+  async recordWritingProgress(chapterRef?: string): Promise<StoryStatus> {
     const raw = await readJsonFile<unknown>(this.statusPath());
     const stored = raw ? StoryStatusSchema.parse(raw) : StoryStatusSchema.parse({});
     const currentWordCount = await this.calculateTotalWordCount();
@@ -138,12 +142,19 @@ export class StoryProject {
     const today = now.toISOString().slice(0, 10);
     const writingLog = [...stored.writingLog];
 
-    if (delta > 0) {
+    if (delta > 0 || chapterRef) {
       const lastEntry = writingLog[writingLog.length - 1];
       if (lastEntry && lastEntry.date === today) {
         lastEntry.wordsWritten += delta;
+        if (chapterRef && !lastEntry.chaptersWorked.includes(chapterRef)) {
+          lastEntry.chaptersWorked.push(chapterRef);
+        }
       } else {
-        writingLog.push({ date: today, wordsWritten: delta, chaptersWorked: [] });
+        writingLog.push({
+          date: today,
+          wordsWritten: delta,
+          chaptersWorked: chapterRef ? [chapterRef] : [],
+        });
       }
     }
 
@@ -166,6 +177,24 @@ export class StoryProject {
 
   async saveTimeline(timeline: Timeline): Promise<void> {
     await writeJsonFile(this.timelinePath(), { ...timeline, updatedAt: new Date().toISOString() });
+  }
+
+  // ====== Character States & Inventory ======
+
+  async getCharacterStates(): Promise<CharacterStatesFile> {
+    const raw = await readJsonFile<unknown>(this.characterStatesPath());
+    return raw ? CharacterStatesFileSchema.parse(raw) : CharacterStatesFileSchema.parse({});
+  }
+
+  async saveCharacterStates(data: CharacterStatesFile): Promise<void> {
+    await writeJsonFile(this.characterStatesPath(), { ...data, updatedAt: new Date().toISOString() });
+  }
+
+  async getLatestCharacterState(characterName: string): Promise<CharacterStateSnapshot | null> {
+    const file = await this.getCharacterStates();
+    const entry = file.characters.find(c => c.character.toLowerCase() === characterName.toLowerCase());
+    if (!entry || entry.states.length === 0) return null;
+    return entry.states[entry.states.length - 1];
   }
 
   // ====== Plot Holes ======
@@ -223,7 +252,6 @@ export class StoryProject {
 
   async getCharacter(name: string): Promise<{ frontmatter: Record<string, unknown>; content: string } | null> {
     const charDir = path.join(this.bibleDir, 'characters');
-    // Try exact filename match first
     const possiblePaths = [
       path.join(charDir, `${name}.md`),
       path.join(charDir, `${name.toLowerCase()}.md`),
@@ -232,7 +260,6 @@ export class StoryProject {
     for (const p of possiblePaths) {
       const content = await readTextFile(p);
       if (content !== null) {
-        // Parse YAML frontmatter bằng gray-matter (hỗ trợ cú pháp YAML đầy đủ)
         const parsed = matter(content);
         return {
           frontmatter: parsed.data as Record<string, unknown>,
@@ -262,7 +289,6 @@ export class StoryProject {
     for (const p of possiblePaths) {
       const content = await readTextFile(p);
       if (content !== null) {
-        // Tách frontmatter để trả về phần nội dung lore sạch sẽ
         return matter(content).content.trim();
       }
     }
@@ -275,6 +301,65 @@ export class StoryProject {
     if (!isSafePathSegment(arc) || !isSafePathSegment(chapter)) return null;
     const chapterPath = path.join(this.manuscriptDir, arc, `${chapter}.md`);
     return readTextFile(chapterPath);
+  }
+
+  async writeChapter(
+    arc: string,
+    chapter: string,
+    content: string,
+    title?: string
+  ): Promise<{ path: string; wordCount: number; isNew: boolean }> {
+    if (!isSafePathSegment(arc) || !isSafePathSegment(chapter)) {
+      throw new Error(`Đường dẫn không hợp lệ: ${arc}/${chapter}`);
+    }
+    const arcDir = path.join(this.manuscriptDir, arc);
+    await fs.mkdir(arcDir, { recursive: true });
+
+    const filePath = path.join(arcDir, `${chapter}.md`);
+    const isNew = !(await exists(filePath));
+
+    let finalContent = content.trim();
+    if (title && !finalContent.startsWith('#')) {
+      finalContent = `# ${title}\n\n${finalContent}`;
+    }
+    if (!finalContent.endsWith('\n')) {
+      finalContent += '\n';
+    }
+
+    await fs.writeFile(filePath, finalContent, 'utf-8');
+    const wordCount = countWords(finalContent);
+
+    // Ghi nhận tiến độ viết
+    await this.recordWritingProgress(`${arc}/${chapter}`);
+
+    return { path: filePath, wordCount, isNew };
+  }
+
+  async appendChapterScene(
+    arc: string,
+    chapter: string,
+    sceneContent: string,
+    sceneHeading?: string
+  ): Promise<{ path: string; totalWordCount: number }> {
+    if (!isSafePathSegment(arc) || !isSafePathSegment(chapter)) {
+      throw new Error(`Đường dẫn không hợp lệ: ${arc}/${chapter}`);
+    }
+    const arcDir = path.join(this.manuscriptDir, arc);
+    await fs.mkdir(arcDir, { recursive: true });
+
+    const filePath = path.join(arcDir, `${chapter}.md`);
+    let currentContent = (await readTextFile(filePath)) || '';
+
+    const headingPart = sceneHeading ? `\n\n### ${sceneHeading}\n\n` : '\n\n---\n\n';
+    const updatedContent = (currentContent.trim() + headingPart + sceneContent.trim()).trim() + '\n';
+
+    await fs.writeFile(filePath, updatedContent, 'utf-8');
+    const totalWordCount = countWords(updatedContent);
+
+    // Ghi nhận tiến độ viết
+    await this.recordWritingProgress(`${arc}/${chapter}`);
+
+    return { path: filePath, totalWordCount };
   }
 
   async listArcs(): Promise<string[]> {
@@ -366,6 +451,7 @@ export class StoryProject {
     await writeJsonFile(this.holesPath(), PlotHolesFileSchema.parse({}));
     await writeJsonFile(this.foreshadowingPath(), ForeshadowingFileSchema.parse({}));
     await writeJsonFile(this.relationshipsPath(), RelationshipsFileSchema.parse({}));
+    await writeJsonFile(this.characterStatesPath(), CharacterStatesFileSchema.parse({}));
     await writeJsonFile(this.styleGuidePath(), StyleGuideSchema.parse({}));
 
     // Create placeholder files

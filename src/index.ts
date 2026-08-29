@@ -13,9 +13,13 @@ import { runSetupWizard, runInitNovel, runDoctor, runInstallSkill, printHelp } f
 // Tools: Project Management (runtime project switching)
 import { registerProjectManagerTools } from './tools/projectManager.js';
 
-// Tools: Init & Export
+// Tools: Init, Export & Dashboard
 import { registerInitTool } from './tools/init.js';
 import { registerExportTool } from './tools/export.js';
+import { registerDashboardTool } from './tools/dashboard.js';
+
+// Tools: Manuscript Authoring & Scene Management
+import { registerManuscriptAuthoringTools } from './tools/manuscript/writeChapter.js';
 
 // Tools: Rescue Suite
 import { registerScanMessyProjectTool } from './tools/rescue/scanMessyProject.js';
@@ -26,6 +30,7 @@ import { registerSnapshotTools } from './tools/rescue/snapshot.js';
 import { registerPlotHoleTools } from './tools/management/plotHoles.js';
 import { registerStatsTool } from './tools/management/stats.js';
 import { registerForeshadowingTools } from './tools/management/foreshadowing.js';
+import { registerCharacterStateTools } from './tools/management/characterState.js';
 
 // Tools: Graph & Memory Suite (Phase 3)
 import { registerExtractEntitiesTool } from './tools/graph/extractEntities.js';
@@ -67,7 +72,7 @@ async function handleCliOrServer() {
     return;
   }
   if (subCommand === '--version' || subCommand === '-v' || subCommand === 'version') {
-    console.log('story-architect-mcp v0.1.0');
+    console.log('story-architect-mcp v0.2.0');
     return;
   }
 
@@ -77,8 +82,6 @@ async function handleCliOrServer() {
 
 async function startMcpServer() {
   // Runtime-switchable Project State
-  // CLI arg vẫn hoạt động như trước (backward-compatible).
-  // Nếu không truyền arg → chờ story_set_project thiết lập.
   const initialPath = process.argv[2] || null;
   let currentProject: StoryProject | null = initialPath
     ? new StoryProject(path.resolve(initialPath))
@@ -102,7 +105,7 @@ async function startMcpServer() {
 
   const server = new McpServer({
     name: 'story-architect-mcp',
-    version: '0.1.0',
+    version: '0.2.0',
   });
 
   // ─── Register Resources ───
@@ -111,10 +114,13 @@ async function startMcpServer() {
   // ─── Register Prompts ───
   registerPrompts(server, getProject);
 
-  // ─── Register Tools (23 Tools total) ───
+  // ─── Register Tools (28 Tools total) ───
   registerProjectManagerTools(server, setProject, () => currentProject, getCurrentPath);
   registerInitTool(server, getProject);
   registerExportTool(server, getProject);
+  registerDashboardTool(server, getProject);
+
+  registerManuscriptAuthoringTools(server, getProject);
 
   registerScanMessyProjectTool(server, getProject);
   registerAutoRefactorTool(server, getProject);
@@ -123,6 +129,7 @@ async function startMcpServer() {
   registerPlotHoleTools(server, getProject);
   registerStatsTool(server, getProject);
   registerForeshadowingTools(server, getProject);
+  registerCharacterStateTools(server, getProject);
 
   registerExtractEntitiesTool(server, getProject);
   registerMapRelationshipsTool(server, getProject);
@@ -138,7 +145,7 @@ async function startMcpServer() {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`[story-architect-mcp] Server started with 23 tools, 7 static resources, 3 templates, and 5 prompts.`);
+  console.error(`[story-architect-mcp] Server started with 28 tools, 8 static resources, 4 templates, and 5 prompts.`);
   if (initialPath) {
     console.error(`[story-architect-mcp] Initial Project Path: ${path.resolve(initialPath)}`);
   } else {

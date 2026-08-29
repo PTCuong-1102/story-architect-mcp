@@ -21,9 +21,6 @@ function compareChapter(a: string, b: string): number {
   return a.localeCompare(b);
 }
 
-const BASE_DATE = '2026-01-01';
-const STEP_MS = 2 * 24 * 60 * 60 * 1000;
-
 function parseAbsoluteDate(value?: string): Date | null {
   if (!value) return null;
   const d = new Date(value);
@@ -32,7 +29,7 @@ function parseAbsoluteDate(value?: string): Date | null {
 
 /**
  * Sinh mã Mermaid Flowchart từ danh sách sự kiện timeline.
- * Ưu tiên absoluteDate khi có; sắp xếp theo relativeOrder.
+ * Hỗ trợ gom nhóm sự kiện theo Subplot / Thread song song.
  */
 function generateMermaidTimeline(events: TimelineEvent[]): string {
   if (events.length === 0) {
@@ -41,24 +38,50 @@ function generateMermaidTimeline(events: TimelineEvent[]): string {
 
   const lines: string[] = [
     '```mermaid',
-    'flowchart LR',
+    'flowchart TD',
   ];
 
-  // Sắp xếp theo relativeOrder
-  const sorted = [...events].sort((a, b) => a.relativeOrder - b.relativeOrder);
-
-  sorted.forEach((e, idx) => {
-    const idStr = `evt_${idx + 1}`;
-    const cleanLabel = e.label.replace(/["\n]/g, "'");
-    const dateStr = e.absoluteDate ? `📅 ${e.absoluteDate}` : `Thứ tự #${e.relativeOrder}`;
-    const chStr = e.chapter ? `<br/>📖 ${e.chapter}` : '';
-    lines.push(`    ${idStr}["<b>${cleanLabel}</b><br/>${dateStr}${chStr}"]`);
-
-    if (idx > 0) {
-      const prevId = `evt_${idx}`;
-      lines.push(`    ${prevId} --> ${idStr}`);
+  // Gom nhóm theo thread
+  const threadMap = new Map<string, TimelineEvent[]>();
+  for (const ev of events) {
+    const threadName = ev.thread?.trim() || 'Tuyến truyện chính';
+    if (!threadMap.has(threadName)) {
+      threadMap.set(threadName, []);
     }
-  });
+    threadMap.get(threadName)!.push(ev);
+  }
+
+  let globalIdx = 0;
+  const eventNodeIds = new Map<string, string>();
+
+  for (const [threadName, threadEvents] of threadMap) {
+    const sorted = [...threadEvents].sort((a, b) => a.relativeOrder - b.relativeOrder);
+    const safeSubName = threadName.replace(/["\n\\]/g, "'");
+
+    lines.push(`    subgraph "${safeSubName}"`);
+
+    let prevNodeId: string | null = null;
+    for (const e of sorted) {
+      globalIdx++;
+      const idStr = `evt_${globalIdx}`;
+      eventNodeIds.set(e.id, idStr);
+
+      const cleanLabel = e.label.replace(/["\n\\]/g, "'");
+      const dateStr = e.absoluteDate ? `📅 ${e.absoluteDate}` : `Thứ tự #${e.relativeOrder}`;
+      const chStr = e.chapter ? `<br/>📖 ${e.chapter}` : '';
+      const locStr = e.location ? `<br/>📍 ${e.location}` : '';
+      const charStr = e.characters.length > 0 ? `<br/>👥 ${e.characters.join(', ')}` : '';
+
+      lines.push(`        ${idStr}["<b>${cleanLabel}</b><br/>${dateStr}${chStr}${locStr}${charStr}"]`);
+
+      if (prevNodeId) {
+        lines.push(`        ${prevNodeId} --> ${idStr}`);
+      }
+      prevNodeId = idStr;
+    }
+
+    lines.push('    end');
+  }
 
   lines.push('```');
   return lines.join('\n');
@@ -68,15 +91,18 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
   server.registerTool(
     'story_detect_timeline_conflicts',
     {
-      title: 'Detect Timeline Conflicts & Generate Mermaid Timeline',
-      description: 'Phân tích các mốc thời gian tuyệt đối & tương đối, sự kiện để phát hiện mâu thuẫn timeline. Xuất Mermaid Flowchart trực quan hóa.',
+      title: 'Detect Timeline Conflicts & Generate Mermaid Parallel Timeline',
+      description: 'Phân tích các mốc thời gian tuyệt đối & tương đối, sự kiện, địa điểm và nhân vật để phát hiện mâu thuẫn timeline (như phân thân xuất hiện ở 2 nơi cùng lúc, đảo ngược thứ tự sự kiện). Hỗ trợ các tuyến truyện song song (Threads/Subplots) và xuất biểu đồ Mermaid trực quan.',
       inputSchema: z.object({
         addEvent: z.object({
           label: z.string().describe('Tên sự kiện'),
           description: z.string().optional(),
           chapter: z.string().optional().describe('Chương diễn ra sự kiện'),
-          absoluteDate: z.string().optional().describe('Mốc thời gian tuyệt đối (YYYY-MM-DD hoặc ISO)'),
-          relativeOrder: z.number().default(0),
+          absoluteDate: z.string().optional().describe('Mốc thời gian tuyệt đối (YYYY-MM-DD hoặc in-world date)'),
+          relativeOrder: z.number().default(0).describe('Thứ tự tương đối của sự kiện'),
+          characters: z.array(z.string()).optional().describe('Danh sách nhân vật tham gia'),
+          location: z.string().optional().describe('Địa điểm diễn ra sự kiện'),
+          thread: z.string().optional().describe('Tuyến subplot / storyline (ví dụ: "Phe Kháng Chiến", "Cung Đình")'),
         }).optional().describe('Thêm sự kiện timeline mới (nếu cần)'),
       }),
     },
@@ -98,41 +124,67 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
           chapter: params.addEvent.chapter,
           absoluteDate: params.addEvent.absoluteDate,
           relativeOrder: params.addEvent.relativeOrder,
-          characters: [],
+          characters: params.addEvent.characters || [],
+          location: params.addEvent.location,
+          thread: params.addEvent.thread,
         });
         await project.saveTimeline(timeline);
       }
 
       const events = timeline.events;
 
-      // Detect conflicts
+      // Phát hiện mâu thuẫn
       const conflicts: string[] = [];
+      const parallelNotes: string[] = [];
 
       for (let i = 0; i < events.length; i++) {
         for (let j = i + 1; j < events.length; j++) {
           const evA = events[i];
           const evB = events[j];
 
-          // Trùng relativeOrder
-          if (evA.relativeOrder === evB.relativeOrder && evA.relativeOrder !== 0) {
-            conflicts.push(`⚠️ Sự kiện "${evA.label}" và "${evB.label}" có cùng mốc thời gian tương đối (${evA.relativeOrder}).`);
-          }
+          const sameThread = (evA.thread || '') === (evB.thread || '');
+          const commonChars = evA.characters.filter(c => evB.characters.map(x => x.toLowerCase()).includes(c.toLowerCase()));
 
-          // Thứ tự chương ngược với relativeOrder (so sánh tự nhiên)
-          if (evA.chapter && evB.chapter && evA.chapter !== evB.chapter) {
-            const chapterOrder = compareChapter(evA.chapter, evB.chapter);
-            if (chapterOrder > 0 && evA.relativeOrder < evB.relativeOrder) {
-              conflicts.push(`⚠️ Mâu thuẫn thứ tự: "${evA.label}" (${evA.chapter}) theo mốc thời gian xảy ra trước "${evB.label}" (${evB.chapter}), nhưng lại nằm ở chương muộn hơn.`);
+          // 1. Kiểm tra Omnipresence / Phân thân (Cùng 1 nhân vật xuất hiện ở 2 nơi cùng lúc)
+          if (commonChars.length > 0) {
+            const sameDate = evA.absoluteDate && evB.absoluteDate && evA.absoluteDate === evB.absoluteDate;
+            const sameOrder = evA.relativeOrder === evB.relativeOrder && evA.relativeOrder !== 0;
+
+            if ((sameDate || sameOrder) && evA.location && evB.location && evA.location !== evB.location) {
+              conflicts.push(
+                `🚨 MÂU THUẪN ĐỊA ĐIỂM (Phân Thân): Nhân vật [${commonChars.join(', ')}] tham gia cùng lúc tại "${evA.label}" (📍${evA.location}) và "${evB.label}" (📍${evB.location}).`
+              );
             }
           }
 
-          // Mâu thuẫn absoluteDate so với relativeOrder
+          // 2. Mâu thuẫn thứ tự trong cùng 1 Thread hoặc cùng Nhân vật
+          if (sameThread || commonChars.length > 0) {
+            if (evA.chapter && evB.chapter && evA.chapter !== evB.chapter) {
+              const chapterOrder = compareChapter(evA.chapter, evB.chapter);
+              if (chapterOrder > 0 && evA.relativeOrder < evB.relativeOrder) {
+                conflicts.push(
+                  `⚠️ Mâu thuẫn thứ tự chương: "${evA.label}" (${evA.chapter}) xảy ra trước "${evB.label}" (${evB.chapter}) nhưng lại nằm ở chương muộn hơn.`
+                );
+              }
+            }
+          }
+
+          // 3. Mâu thuẫn absoluteDate so với relativeOrder
           const absA = parseAbsoluteDate(evA.absoluteDate);
           const absB = parseAbsoluteDate(evB.absoluteDate);
           if (absA && absB) {
             if (absA.getTime() > absB.getTime() && evA.relativeOrder < evB.relativeOrder) {
-              conflicts.push(`⚠️ "${evA.label}" (${evA.absoluteDate}) có ngày muộn hơn "${evB.label}" (${evB.absoluteDate}) nhưng thứ tự tương đối lại sớm hơn.`);
+              conflicts.push(
+                `⚠️ Mâu thuẫn ngày: "${evA.label}" (${evA.absoluteDate}) muộn hơn "${evB.label}" (${evB.absoluteDate}) nhưng relativeOrder lại sớm hơn.`
+              );
             }
+          }
+
+          // Ghi nhận tuyến song song
+          if (!sameThread && (evA.relativeOrder === evB.relativeOrder || (absA && absB && absA.getTime() === absB.getTime()))) {
+            parallelNotes.push(
+              `⚡ Tuyến song song: [${evA.thread || 'Chính'}: "${evA.label}"] ⇆ [${evB.thread || 'Chính'}: "${evB.label}"]`
+            );
           }
         }
       }
@@ -142,17 +194,18 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
       return {
         content: [{
           type: 'text' as const,
-          text: `📊 Phân tích Timeline & Mermaid Flowchart
+          text: `📊 Phân tích Timeline & Tuyến Song Song (Parallel Subplots)
  
- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  
- 📅 Tổng số sự kiện: ${events.length}
- ${conflicts.length > 0 ? '❌ Mâu thuẫn phát hiện:\n' + conflicts.join('\n') : '✅ Không phát hiện mâu thuẫn thời gian nào!'}
+📅 Tổng số sự kiện: ${events.length}
+${conflicts.length > 0 ? '\n❌ Mâu thuẫn phát hiện:\n' + conflicts.join('\n') : '\n✅ Không phát hiện mâu thuẫn thời gian nào!'}
+${parallelNotes.length > 0 ? '\n🔀 Sự kiện diễn ra đồng thời (Parallel Threads):\n' + parallelNotes.join('\n') : ''}
  
- 🎨 Trực quan hóa (Mermaid Flowchart):
- ${mermaidDiagram}
+🎨 Trực quan hóa Timeline (Mermaid Flowchart):
+${mermaidDiagram}
  
- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
         }],
       };
     }

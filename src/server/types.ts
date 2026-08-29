@@ -37,7 +37,7 @@ export const StoryStatusSchema = z.object({
 export type StoryStatus = z.infer<typeof StoryStatusSchema>;
 
 // ============================================================
-// Timeline
+// Timeline & Parallel Threads
 // ============================================================
 
 export const TimelineEventSchema = z.object({
@@ -47,8 +47,9 @@ export const TimelineEventSchema = z.object({
   absoluteDate: z.string().optional().describe('ISO date hoặc in-world date'),
   relativeOrder: z.number().default(0).describe('Thứ tự tương đối'),
   chapter: z.string().optional().describe('Chương liên quan'),
-  characters: z.array(z.string()).default([]),
-  location: z.string().optional(),
+  characters: z.array(z.string()).default([]).describe('Nhân vật tham gia sự kiện'),
+  location: z.string().optional().describe('Địa điểm diễn ra sự kiện'),
+  thread: z.string().optional().describe('Tuyến truyện / Subplot (ví dụ: "Main Quest", "Rebellion Line")'),
 });
 export type TimelineEvent = z.infer<typeof TimelineEventSchema>;
 
@@ -57,6 +58,35 @@ export const TimelineSchema = z.object({
   updatedAt: z.string().default(() => new Date().toISOString()),
 });
 export type Timeline = z.infer<typeof TimelineSchema>;
+
+// ============================================================
+// Character State & Inventory Tracking
+// ============================================================
+
+export const CharacterStateSnapshotSchema = z.object({
+  chapter: z.string().describe('Chương ghi nhận (ví dụ: arc_01/ch_002)'),
+  arc: z.string().optional(),
+  location: z.string().optional().describe('Vị trí hiện tại của nhân vật'),
+  inventory: z.array(z.string()).default([]).describe('Đồ vật / Vũ khí / Bảo vật đang mang theo'),
+  condition: z.string().optional().describe('Tình trạng thể chất / cảm xúc (bị thương, kiệt sức, giác ngộ...)'),
+  status: z.enum(['alive', 'injured', 'unconscious', 'captured', 'dead', 'unknown']).default('alive'),
+  knownSecrets: z.array(z.string()).default([]).describe('Bí mật hoặc thông tin nhân vật vừa biết được'),
+  notes: z.string().default(''),
+  timestamp: z.string().default(() => new Date().toISOString()),
+});
+export type CharacterStateSnapshot = z.infer<typeof CharacterStateSnapshotSchema>;
+
+export const CharacterStateHistorySchema = z.object({
+  character: z.string().describe('Tên hoặc fileKey của nhân vật'),
+  states: z.array(CharacterStateSnapshotSchema).default([]),
+});
+export type CharacterStateHistory = z.infer<typeof CharacterStateHistorySchema>;
+
+export const CharacterStatesFileSchema = z.object({
+  characters: z.array(CharacterStateHistorySchema).default([]),
+  updatedAt: z.string().default(() => new Date().toISOString()),
+});
+export type CharacterStatesFile = z.infer<typeof CharacterStatesFileSchema>;
 
 // ============================================================
 // Plot Holes
