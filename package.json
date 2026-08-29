@@ -41,13 +41,13 @@
     "doctor": "node dist/index.js doctor"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "^1.11.0",
+    "@modelcontextprotocol/server": "^2.0.0",
     "gray-matter": "^4.0.3",
-    "zod": "^3.23.8"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.4.5"
+    "@types/node": "^22.0.0",
+    "tsx": "^4.23.5",
+    "typescript": "^5.7.0"
   }
 }

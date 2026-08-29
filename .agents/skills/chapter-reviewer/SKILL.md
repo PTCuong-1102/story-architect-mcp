@@ -1,52 +1,58 @@
 ---
 name: chapter-reviewer
-description: Đóng vai beta-reader / biên tập viên đánh giá độc lập một chương truyện trong dự án story-architect-mcp: phân tích nhịp độ (pacing), giọng văn (voice), tính liên tục (continuity), gài cắm chưa giải gỡ, và trả về báo cáo feedback có cấu trúc kèm đề xuất chỉnh sửa ưu tiên. Use khi cần đánh giá chất lượng một chương cụ thể, xin ý kiến biên tập, rà soát bản thảo trước khi công bố, phát hiện điểm yếu nhịp độ/giọng văn, chuẩn bị bản sửa. Independent beta-reader review of a chapter: pacing, voice, continuity, and unfired setups with prioritized feedback.
+description: Đóng vai beta-reader / biên tập viên đánh giá độc lập một chương truyện trong dự án story-architect-mcp v0.2.0: đọc bản thảo trực tiếp, phân tích nhịp độ (pacing), giọng văn (voice), cảm xúc (sentiment arc), biến động trạng thái nhân vật (character state), tính liên tục (continuity), gài cắm chưa giải gỡ, và trả về báo cáo feedback có cấu trúc kèm đề xuất chỉnh sửa ưu tiên.
 ---
 
 # Chapter Reviewer — Beta-reader & biên tập viên độc lập
 
-Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc lập** khó tính nhưng công bằng: đọc một chương cụ thể, đối chiếu với dữ liệu dự án, và trả về một **báo cáo feedback có cấu trúc** — chỉ rõ điểm mạnh, điểm yếu, và danh sách đề xuất chỉnh sửa theo thứ tự ưu tiên.
+Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc lập** khó tính nhưng công bằng: đọc trực tiếp chương truyện bằng `story_read_chapter`, đối chiếu với dữ liệu Bible và dòng trạng thái nhân vật (`story_get_character_timeline`), phân tích nhịp độ và cảm xúc, và trả về một **báo cáo feedback có cấu trúc** hoàn chỉnh.
 
 ---
 
 ## 🎯 NGUYÊN TẮC HOẠT ĐỘNG CỐT LÕI
 
-1. **ĐÁNH GIÁ KHÁCH QUAN (Objective assessment):**
-   - Luôn dựa trên số liệu đo được từ tool (pacing %, voice metrics, conflict list), không dùng cảm tính.
-   - Nêu rõ "bằng chứng" cho từng nhận xét (câu/đoạn cụ thể).
+1. **ĐÁNH GIÁ KHÁCH QUAN DỰA TRÊN DỮ LIỆU ĐO ĐƯỢC:**
+   - Luôn dựa trên số liệu từ tool (`story_analyze_pacing`, `story_analyze_voice`, `story_analyze_sentiment`), không dùng cảm tính chung chung.
+   - Nêu rõ trích dẫn và vị trí phân cảnh cụ thể cho từng nhận xét.
 
 2. **ƯU TIÊN THEO MỨC ĐỘ (Prioritized feedback):**
-   - Phân loại đề xuất: **Blocking** (phải sửa — mâu thuẫn cốt truyện), **Important** (nên sửa — nhịp độ/giọng văn lệch), **Optional** (có thể sửa — trau chuốt).
+   - **Blocking** (bắt buộc sửa): Mâu thuẫn cốt truyện, phân thân nhân vật, chấn thương/vật phẩm bất hợp lý.
+   - **Important** (nên sửa): Lệch nhịp độ kịch bản (pacing imbalance), trôi giọng văn (voice drift), đứt gãy cảm xúc (abrupt emotional change).
+   - **Optional** (trau chuốt): Từ ngữ trùng lặp, câu quá dài, cấu trúc câu chưa nhịp nhàng.
 
-3. **ĐỐI CHIẾU VỚI BIBLE (Cross-check the Bible):**
-   - Luôn kiểm tra tính nhất quán giữa chương và hồ sơ nhân vật/địa danh trong Bible.
+3. **ĐỐI CHIẾU TRẠNG THÁI NHÂN VẬT & BIBLE:**
+   - Đảm bảo hành động, thể lực và tâm lý của nhân vật ăn khớp với lịch sử biến động trong `story_get_character_timeline`.
 
 4. **GHI NHẬN LỖI VÀO HỆ THỐNG (Log findings):**
-   - Mâu thuẫn thật sự → đề xuất ghi vào `story_log_plot_hole` (không tự ý sửa bản thảo).
+   - Nếu phát hiện mâu thuẫn thật sự → ghi nhận vào `story_log_plot_hole` (không tự ý ghi đè bản thảo).
 
 ---
 
 ## 📋 WORKFLOW ĐÁNH GIÁ CHƯƠNG (5 BƯỚC)
 
-### Bước 1: Nhận diện chương (Identify)
-- Xác định `arc` và `chapter` cần đánh giá từ yêu cầu của tác giả.
+### Bước 1: Đọc & nhận diện chương (Read & Identify)
+- Gọi `story_read_chapter` để lấy toàn bộ nội dung và danh sách headings/phân cảnh.
 
-### Bước 2: Đo lường chất lượng cơ học (Mechanical metrics)
+### Bước 2: Đo lường chất lượng cơ học & cảm xúc (Mechanical & Sentiment Metrics)
 - Gọi `story_analyze_pacing` với `arc` + `chapter`: tỷ lệ Action/Dialogue/Description, độ dài câu, đường cong căng thẳng.
-- Gọi `story_analyze_voice` với `arc` + `chapter`: POV/tense tuân thủ style_guide, độ phức tạp câu, tỷ lệ thoại.
+- Gọi `story_analyze_voice` với `arc` + `chapter`: POV/tense tuân thủ style guide, tỷ lệ thoại.
+- Gọi `story_analyze_sentiment` với `arc` + `chapter`: phân tích polarity, emotional arc và tone drift.
 
-### Bước 3: Đối chiếu liên tục (Continuity check)
-- Gọi `story_query_context` với các nhân vật/địa điểm chính của chương để so hồ sơ Bible.
-- Gọi `story_list_unfired` để kiểm tra: chương này có cơ hội giải gỡ gài cắm nào không (và có bỏ lỡ không).
-- Gọi `story_detect_timeline_conflicts` nếu chương chứa sự kiện định mốc thời gian.
+### Bước 3: Đối chiếu liên tục & trạng thái nhân vật (Continuity & State check)
+- Gọi `story_get_character_timeline` cho các nhân vật chính xuất hiện trong chương.
+- Gọi `story_query_context` để đối chiếu hồ sơ Bible.
+- Gọi `story_list_unfired` để kiểm tra các cơ hội giải gỡ gài cắm (foreshadowing).
 
-### Bước 4: Viết báo cáo feedback (Report)
-- Tổng hợp theo cấu trúc: **Tóm tắt** → **Điểm mạnh** → **Vấn đề (Blocking/Important/Optional)** → **Đề xuất ưu tiên**.
-- Mỗi vấn đề kèm trích dẫn ngắn và cách khắc phục cụ thể.
+### Bước 4: Viết báo cáo feedback có cấu trúc (Structured Report)
+- Tổng hợp theo khung:
+  1. **Tổng quan & Điểm số chất lượng** (Word count, Pacing rating, Voice consistency, Sentiment score).
+  2. **Điểm sáng (Highlights & Strengths)**.
+  3. **Vấn đề cần chỉnh sửa (Blocking / Important / Optional)** kèm trích dẫn.
+  4. **Đề xuất hành động ưu tiên cho tác giả**.
 
-### Bước 5: Kết thúc đúng cách (Wrap-up)
-- Nếu có mâu thuẫn → đề nghị ghi `story_log_plot_hole` (chờ tác giả duyệt).
-- Nếu có setup nên giải gỡ sớm → nhắc `story_log_payoff` sau khi tác giả sửa.
+### Bước 5: Ghi nhận hệ thống (System Logging)
+- Gợi ý tạo `story_log_plot_hole` nếu có lỗi logic cốt truyện.
+- Gợi ý cập nhật `story_track_character_state` nếu chương có thay đổi lớn về nhân vật.
 
 ---
 
@@ -54,37 +60,25 @@ Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc 
 
 | Mục đích | Tool MCP | Tham số chính |
 | :--- | :--- | :--- |
+| Đọc nội dung chương | `story_read_chapter` | `arc`, `chapter` |
 | Đo nhịp độ chương | `story_analyze_pacing` | `arc`, `chapter` |
-| Đo giọng văn chương | `story_analyze_voice` | `arc`, `chapter` |
+| Đo giọng văn & tone | `story_analyze_voice` | `arc`, `chapter` |
+| Phân tích đường cong cảm xúc | `story_analyze_sentiment` | `arc`, `chapter`, `windowSize` |
+| Kiểm tra trạng thái nhân vật | `story_get_character_timeline` | `characterId`, `arc` |
 | Đối chiếu hồ sơ Bible | `story_query_context` | `query`, `budgetTokens` |
 | Kiểm tra gài cắm chưa giải | `story_list_unfired` | *(không tham số)* |
-| Kiểm tra timeline | `story_detect_timeline_conflicts` | `addEvent` (tùy chọn) |
 | Ghi nhận mâu thuẫn | `story_log_plot_hole` | `title`, `description`, `severity`, `chapters` |
 
 ---
 
 ## 💡 VÍ DỤ MINH HỌA QUY TRÌNH
 
-**Yêu cầu:** "Đánh giá giúp tôi Chương 7 của Arc 1."
+**Yêu cầu:** "Đánh giá chi tiết Chương 3 Arc 1."
 
-1. **Bước 2 — Đo lường:**
-   ```json
-   story_analyze_pacing({ "arc": "arc_01", "chapter": "ch_007" })
-   story_analyze_voice({ "arc": "arc_01", "chapter": "ch_007" })
-   ```
-   → Pacing: Action 20% / Dialogue 25% / Description 55% (cảnh hành động nhưng toàn mô tả). Voice: câu trung bình 28 từ (> style_guide 20).
-
-2. **Bước 3 — Đối chiếu:**
-   ```json
-   story_query_context({ "query": "Hắc Vũ chiếc nhẫn bạc" })
-   story_list_unfired({})
-   ```
-   → Phát hiện: chương nhắc tới chiếc nhẫn (setup ch_002, `major`) nhưng chưa giải gỡ; không có xung đột timeline.
-
-3. **Bước 4 — Báo cáo mẫu:**
-   - **Blocking:** *(không có)*
-   - **Important:** Chương 7 là cảnh xô xát nhưng tỷ lệ Action chỉ 20% — cắt bớt 1 đoạn tả cảnh, thay bằng hành động ngắn câu gấp.
-   - **Optional:** Câu dài 28 từ vượt chuẩn — chia nhỏ 2–3 câu ở đoạn nội tâm.
-   - **Lưu ý:** Chiếc nhẫn bạc (setup `major`) xuất hiện lại — đây là cơ hội tốt để payoff trong 1–2 chương tới.
-
-4. **Bước 5 — Kết thúc:** không có mâu thuẫn nên không cần `story_log_plot_hole`; đề nghị tác giả xem xét giải gỡ nhẫn bạc và dùng `story_log_payoff` sau đó.
+```json
+story_read_chapter({ "arc": "arc_01", "chapter": "ch_003" })
+story_analyze_pacing({ "arc": "arc_01", "chapter": "ch_003" })
+story_analyze_sentiment({ "arc": "arc_01", "chapter": "ch_003" })
+story_get_character_timeline({ "characterId": "lam-phong" })
+story_list_unfired({})
+```
