@@ -4,7 +4,8 @@
  * và inline (link, image, bold, italic, inline code).
  */
 
-function escapeHtml(s: string): string {
+/** Escape text để nhúng an toàn vào HTML (dùng chung cho dashboard/export). */
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

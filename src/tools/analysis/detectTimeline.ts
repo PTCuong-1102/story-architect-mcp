@@ -28,10 +28,41 @@ function parseAbsoluteDate(value?: string): Date | null {
 }
 
 /**
+ * Làm sạch text để nhúng vào node Mermaid `["..."]`.
+ * Các ký tự `[]{}"` và `\n` phá vỡ cú pháp flowchart (kể cả trong chuỗi
+ * trích dẫn), nên được thay thế; `<br/>`, `<b>`, emoji và `-->`, `|`, `&`
+ * trong trích dẫn vẫn an toàn nên giữ nguyên. Cắt ngắn nhãn quá dài
+ * để node không phình mất cân đối.
+ */
+export function sanitizeMermaidLabel(text: string, maxLen = 140): string {
+  const cleaned = text
+    .replace(/\\/g, '')
+    .replace(/"/g, "'")
+    .replace(/\r?\n/g, ' ')
+    .replace(/\[/g, '(')
+    .replace(/\]/g, ')')
+    .replace(/\{/g, '(')
+    .replace(/\}/g, ')')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned.length > maxLen ? cleaned.slice(0, maxLen - 1).trimEnd() + '…' : cleaned;
+}
+
+/** ID node ổn định theo event.id (thay vì đếm thứ tự render). */
+function stableNodeId(eventId: string, used: Set<string>): string {
+  const base = 'n_' + (String(eventId ?? '').replace(/[^A-Za-z0-9_]/g, '') || 'evt');
+  let candidate = base;
+  let n = 2;
+  while (used.has(candidate)) candidate = `${base}_${n++}`;
+  used.add(candidate);
+  return candidate;
+}
+
+/**
  * Sinh mã Mermaid Flowchart từ danh sách sự kiện timeline.
  * Hỗ trợ gom nhóm sự kiện theo Subplot / Thread song song.
  */
-function generateMermaidTimeline(events: TimelineEvent[]): string {
+export function generateMermaidTimeline(events: TimelineEvent[]): string {
   if (events.length === 0) {
     return '```mermaid\nflowchart LR\n    Start["Chưa có sự kiện timeline"]\n```';
   }
@@ -51,26 +82,25 @@ function generateMermaidTimeline(events: TimelineEvent[]): string {
     threadMap.get(threadName)!.push(ev);
   }
 
-  let globalIdx = 0;
+  const usedNodeIds = new Set<string>();
   const eventNodeIds = new Map<string, string>();
 
   for (const [threadName, threadEvents] of threadMap) {
     const sorted = [...threadEvents].sort((a, b) => a.relativeOrder - b.relativeOrder);
-    const safeSubName = threadName.replace(/["\n\\]/g, "'");
+    const safeSubName = sanitizeMermaidLabel(threadName, 60);
 
     lines.push(`    subgraph "${safeSubName}"`);
 
     let prevNodeId: string | null = null;
     for (const e of sorted) {
-      globalIdx++;
-      const idStr = `evt_${globalIdx}`;
+      const idStr = stableNodeId(e.id, usedNodeIds);
       eventNodeIds.set(e.id, idStr);
 
-      const cleanLabel = e.label.replace(/["\n\\]/g, "'");
-      const dateStr = e.absoluteDate ? `📅 ${e.absoluteDate}` : `Thứ tự #${e.relativeOrder}`;
-      const chStr = e.chapter ? `<br/>📖 ${e.chapter}` : '';
-      const locStr = e.location ? `<br/>📍 ${e.location}` : '';
-      const charStr = e.characters.length > 0 ? `<br/>👥 ${e.characters.join(', ')}` : '';
+      const cleanLabel = sanitizeMermaidLabel(e.label);
+      const dateStr = e.absoluteDate ? `📅 ${sanitizeMermaidLabel(e.absoluteDate, 40)}` : `Thứ tự #${e.relativeOrder}`;
+      const chStr = e.chapter ? `<br/>📖 ${sanitizeMermaidLabel(e.chapter, 60)}` : '';
+      const locStr = e.location ? `<br/>📍 ${sanitizeMermaidLabel(e.location, 60)}` : '';
+      const charStr = e.characters.length > 0 ? `<br/>👥 ${sanitizeMermaidLabel(e.characters.join(', '), 100)}` : '';
 
       lines.push(`        ${idStr}["<b>${cleanLabel}</b><br/>${dateStr}${chStr}${locStr}${charStr}"]`);
 

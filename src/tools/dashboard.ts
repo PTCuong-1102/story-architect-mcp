@@ -5,8 +5,13 @@ import * as fs from 'node:fs/promises';
 import { StoryProject } from '../server/StoryProject.js';
 import { errResult, requireProject, isToolError } from '../utils/mcpResults.js';
 import { computeGodNodes } from '../utils/knowledgeGraph.js';
+import { escapeHtml } from '../utils/markdownToHtml.js';
 
-function generateDashboardHtml(
+/**
+ * Sinh dashboard HTML. Mọi dữ liệu người dùng đều qua escapeHtml
+ * để ký tự như < > & trong tên truyện/plot hole không phá vỡ layout.
+ */
+export function generateDashboardHtml(
   configName: string,
   author: string,
   genre: string[],
@@ -30,7 +35,7 @@ function generateDashboardHtml(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${configName} - Story Architect Dashboard</title>
+  <title>${escapeHtml(configName)} - Story Architect Dashboard</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -69,8 +74,8 @@ function generateDashboardHtml(
 <body>
   <div class="header">
     <div>
-      <h1 class="title">${configName}</h1>
-      <p class="meta">Tác giả: <b>${author || 'Chưa thiết lập'}</b> | Thể loại: <b>${genre.join(', ') || 'N/A'}</b></p>
+      <h1 class="title">${escapeHtml(configName)}</h1>
+      <p class="meta">Tác giả: <b>${escapeHtml(author || 'Chưa thiết lập')}</b> | Thể loại: <b>${escapeHtml(genre.join(', ') || 'N/A')}</b></p>
     </div>
     <div class="meta">
       Tạo bởi <b>Story Architect MCP</b>
@@ -117,10 +122,10 @@ function generateDashboardHtml(
       <tbody>
         ${openHoles.length > 0 ? openHoles.map(h => `
           <tr>
-            <td><b>${h.title}</b></td>
-            <td><span class="badge ${h.severity === 'critical' || h.severity === 'high' ? 'badge-danger' : 'badge-warning'}">${h.severity}</span></td>
-            <td>${h.chapters.join(', ') || 'Toàn bộ'}</td>
-            <td>${h.description}</td>
+            <td><b>${escapeHtml(h.title)}</b></td>
+            <td><span class="badge ${h.severity === 'critical' || h.severity === 'high' ? 'badge-danger' : 'badge-warning'}">${escapeHtml(h.severity)}</span></td>
+            <td>${escapeHtml(h.chapters.join(', ') || 'Toàn bộ')}</td>
+            <td>${escapeHtml(h.description)}</td>
           </tr>
         `).join('') : '<tr><td colspan="4" style="text-align: center; color: var(--success); padding: 1.5rem;">🎉 Không có plot hole nào đang mở!</td></tr>'}
       </tbody>
@@ -140,9 +145,9 @@ function generateDashboardHtml(
       <tbody>
         ${unfiredGuns.length > 0 ? unfiredGuns.map(g => `
           <tr>
-            <td><b>${g.setup}</b></td>
-            <td><code>${g.setupChapter}</code></td>
-            <td><span class="badge badge-warning">${g.importance}</span></td>
+            <td><b>${escapeHtml(g.setup)}</b></td>
+            <td><code>${escapeHtml(g.setupChapter)}</code></td>
+            <td><span class="badge badge-warning">${escapeHtml(g.importance)}</span></td>
           </tr>
         `).join('') : '<tr><td colspan="3" style="text-align: center; color: var(--success); padding: 1.5rem;">Tất cả chi tiết cài cắm đã được giải gỡ!</td></tr>'}
       </tbody>
@@ -163,7 +168,7 @@ function generateDashboardHtml(
         ${godNodes.length > 0 ? godNodes.map((g, i) => `
           <tr>
             <td>${i + 1}</td>
-            <td><b>${g.name}</b></td>
+            <td><b>${escapeHtml(g.name)}</b></td>
             <td>${g.degree}</td>
           </tr>
         `).join('') : '<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Chưa có mối quan hệ nào trong đồ thị.</td></tr>'}
