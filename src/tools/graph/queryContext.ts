@@ -12,9 +12,9 @@ export function registerQueryContextTool(server: McpServer, getProject: () => St
       title: 'Query Context Budget',
       description: 'Trích xuất và tổng hợp Context Budget tối ưu nhất bằng Knowledge Graph (Bible + Relationships + Timeline) kết hợp ngân sách token. Truyền from+to để hỏi đường liên hệ ngắn nhất giữa hai nhân vật.',
       inputSchema: z.object({
-        query: z.string().describe('Chủ đề hoặc từ khóa cần lấy context (ví dụ: "Tiêu Viêm Thanh Vân Sơn")'),
-        budgetTokens: z.number().default(2000).describe('Ngân sách token tối đa cho context (mặc định 2000 tokens ~ 1500 từ)'),
-        maxDepth: z.number().default(2).describe('Độ sâu mở rộng quan hệ nhân vật (BFS) trong đồ thị'),
+        query: z.string().min(1).describe('Chủ đề hoặc từ khóa cần lấy context (ví dụ: "Tiêu Viêm Thanh Vân Sơn")'),
+        budgetTokens: z.number().int().min(100).default(2000).describe('Ngân sách token tối đa cho context (mặc định 2000 tokens ~ 1500 từ)'),
+        maxDepth: z.number().int().min(0).max(10).default(2).describe('Độ sâu mở rộng quan hệ nhân vật (BFS) trong đồ thị'),
         rebuildIndex: z.boolean().default(false).describe('Buộc build lại index .cbm/index.json từ dữ liệu mới nhất'),
         from: z.string().optional().describe('Nhân vật xuất phát cho truy vấn đường đi (đi kèm to)'),
         to: z.string().optional().describe('Nhân vật đích cho truy vấn đường đi (đi kèm from)'),
@@ -123,11 +123,15 @@ export function registerQueryContextTool(server: McpServer, getProject: () => St
       }
 
       let assembledText = contextBlocks.join('\n');
-      const estimatedTokens = Math.round(countWords(assembledText) * 1.33);
+      // BPE tiếng Việt có dấu tốn ~2–3 tokens/từ (tiếng Anh ~1.33).
+      // Dùng hệ số theo ngôn ngữ dự án để không vượt budget lén.
+      const lang = (config.language || 'vi').toLowerCase();
+      const tokensPerWord = lang.startsWith('vi') ? 2.4 : 1.33;
+      const estimatedTokens = Math.round(countWords(assembledText) * tokensPerWord);
 
       // Cắt giảm nếu vượt ngân sách token
       if (estimatedTokens > params.budgetTokens) {
-        const maxWords = Math.round(params.budgetTokens / 1.33);
+        const maxWords = Math.round(params.budgetTokens / tokensPerWord);
         const words = assembledText.split(/\s+/);
         assembledText = words.slice(0, maxWords).join(' ') + '\n\n_[Đã cắt giảm để vừa ngân sách token]_';
       }

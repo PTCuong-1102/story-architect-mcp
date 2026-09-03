@@ -3,6 +3,17 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import type { CharacterStateSnapshot } from '../../server/types.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
+import { compareNatural } from '../../utils/fileUtils.js';
+
+/**
+ * Chuẩn hóa tên/chương để so khớp: chữ thường + `_`→space + gộp space.
+ * Nhờ đó "Tiêu Viêm", "tiêu viêm" và "tieu_viem"-dạng-hiển-thị không
+ * tạo thành 2 hồ sơ khác nhau; "arc_01/ch_002" và "ch_002"-lệch-format
+ * vẫn khớp khi phần lõi giống nhau.
+ */
+function normKey(s: string): string {
+  return s.toLowerCase().trim().replace(/_/g, ' ').replace(/\s+/g, ' ');
+}
 
 export function registerCharacterStateTools(
   server: McpServer,
@@ -14,7 +25,7 @@ export function registerCharacterStateTools(
       title: 'Track & Query Character State, Location & Inventory',
       description: 'Ghi nhận hoặc truy vấn trạng thái nhân vật theo từng mốc chương (vị trí hiện tại, vật phẩm/vũ khí mang theo, tình trạng thương tích, bí mật đã biết) để đảm bảo tính liên tục (continuity).',
       inputSchema: z.object({
-        character: z.string().describe('Tên nhân vật (ví dụ: "Tiêu Viêm", "nhan_vat_chinh")'),
+        character: z.string().min(1).max(200).describe('Tên nhân vật (ví dụ: "Tiêu Viêm", "nhan_vat_chinh")'),
         chapter: z.string().optional().describe('Chương ghi nhận hoặc muốn truy vấn (ví dụ: "arc_01/ch_002")'),
         action: z.enum(['log', 'query', 'history']).default('query').describe('Thao tác: "log" (ghi nhận mới), "query" (lấy trạng thái mới nhất), "history" (lịch sử biến đổi)'),
         state: z.object({
@@ -35,10 +46,10 @@ export function registerCharacterStateTools(
       }
 
       const statesFile = await project.getCharacterStates();
-      const normChar = params.character.toLowerCase().trim();
+      const normChar = normKey(params.character);
 
       let charHistory = statesFile.characters.find(
-        c => c.character.toLowerCase().trim() === normChar
+        c => normKey(c.character) === normChar
       );
 
       // ─── ACTION: LOG ───
@@ -46,6 +57,8 @@ export function registerCharacterStateTools(
         if (!params.chapter) {
           return errResult('❌ Cần chỉ định tham số "chapter" khi ghi nhận trạng thái nhân vật (action="log").');
         }
+        // Giữ bản sao đã narrow để dùng trong closure bên dưới
+        const logChapter: string = params.chapter;
 
         const snapshot: CharacterStateSnapshot = {
           chapter: params.chapter,
@@ -65,8 +78,8 @@ export function registerCharacterStateTools(
           };
           statesFile.characters.push(charHistory);
         } else {
-          // Nếu cùng chương thì update hoặc push mới
-          const existingIdx = charHistory.states.findIndex(s => s.chapter === params.chapter);
+          // Nếu cùng chương thì update hoặc push mới (so khớp chuẩn hóa)
+          const existingIdx = charHistory.states.findIndex(s => normKey(s.chapter ?? '') === normKey(logChapter));
           if (existingIdx >= 0) {
             charHistory.states[existingIdx] = snapshot;
           } else {
@@ -102,7 +115,10 @@ export function registerCharacterStateTools(
           };
         }
 
-        const historyLines = charHistory.states.map((s, idx) => {
+        // Sắp xếp theo thứ tự chương tự nhiên (ch_002 < ch_010),
+        // không phụ thuộc thứ tự log.
+        const orderedStates = [...charHistory.states].sort((a, b) => compareNatural(a.chapter, b.chapter));
+        const historyLines = orderedStates.map((s, idx) => {
           return `### ${idx + 1}. Mốc: ${s.chapter}
 - **Vị trí**: ${s.location || 'N/A'}
 - **Tình trạng**: ${s.status} ${s.condition ? `(${s.condition})` : ''}
@@ -131,7 +147,9 @@ ${historyLines}`,
         };
       }
 
-      const latest = charHistory.states[charHistory.states.length - 1];
+      // "Gần nhất" = mốc có thứ tự chương lớn nhất (tự nhiên), không phải
+      // phần tử log cuối cùng — vì user có thể log ch_002 sau ch_010.
+      const latest = [...charHistory.states].sort((a, b) => compareNatural(a.chapter, b.chapter)).pop()!;
 
       return {
         content: [{

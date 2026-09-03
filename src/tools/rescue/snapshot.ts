@@ -6,6 +6,7 @@ import { StoryProject } from '../../server/StoryProject.js';
 import { exists, copyDir, generateId, readJsonFile, writeJsonFile } from '../../utils/fileUtils.js';
 import type { SnapshotsIndex, Snapshot } from '../../server/types.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
+import { invalidateIndex } from '../../utils/knowledgeGraph.js';
 
 /**
  * Tạo snapshot dùng chung cho dự án (được story_snapshot và các tool
@@ -26,8 +27,11 @@ export async function createSnapshot(
   const storyDir = project.storyDir;
   await fs.mkdir(path.join(snapshotDir, '.story'), { recursive: true });
 
+  // Đủ 8 file init tạo ra (trước đây thiếu character_states.json và
+  // emotions_cache.json nên rollback làm mất trạng thái nhân vật).
   const metaFiles = ['config.json', 'status.json', 'timeline.json',
-    'unresolved_holes.json', 'foreshadowing.json', 'relationships.json', 'style_guide.json'];
+    'unresolved_holes.json', 'foreshadowing.json', 'relationships.json',
+    'character_states.json', 'style_guide.json', 'emotions_cache.json'];
 
   let fileCount = 0;
   for (const file of metaFiles) {
@@ -81,6 +85,35 @@ export async function createSnapshot(
   return { ...snapshot, snapshotDir };
 }
 
+/** Liệt kê mọi file (đường dẫn tương đối) dưới một thư mục, sort ổn định. */
+async function listRelativeFiles(dir: string): Promise<string[]> {
+  const out: string[] = [];
+  const walk = async (cur: string, rel: string): Promise<void> => {
+    let entries;
+    try {
+      entries = await fs.readdir(cur, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isSymbolicLink()) continue;
+      const relPath = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) await walk(path.join(cur, e.name), relPath);
+      else if (e.isFile()) out.push(relPath);
+    }
+  };
+  await walk(dir, '');
+  return out.sort();
+}
+
+/** Tóm tắt danh sách xóa: "N file" + tối đa vài tên đầu. */
+function summarizeDeletions(files: string[], maxShow = 8): string {
+  if (files.length === 0) return 'không có';
+  const shown = files.slice(0, maxShow).map(f => `      - ${f}`).join('\n');
+  const more = files.length > maxShow ? `\n      … và ${files.length - maxShow} file nữa` : '';
+  return `${files.length} file\n${shown}${more}`;
+}
+
 export function registerSnapshotTools(server: McpServer, getProject: () => StoryProject): void {
 
   // ─── story_snapshot ───
@@ -104,6 +137,18 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
 
       const snapshot = await createSnapshot(project, params.label, params.description || '');
 
+      // Cảnh báo phình đĩa: full-copy mỗi snapshot, auto-snapshot mặc định bật
+      let retentionNote = '';
+      try {
+        const entries = await fs.readdir(project.getSnapshotsDir(), { withFileTypes: true });
+        const count = entries.filter(e => e.isDirectory()).length;
+        if (count >= 20) {
+          retentionNote = `\n\n⚠️ Đã có ${count} snapshots — hãy dọn bớt snapshot cũ trong .story/snapshots/ để tránh phình đĩa (mỗi snapshot là full-copy).`;
+        }
+      } catch {
+        // không đọc được thư mục snapshots thì bỏ qua cảnh báo
+      }
+
       return {
         content: [{
           type: 'text' as const,
@@ -115,7 +160,7 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
 📅 Thời gian: ${snapshot.createdAt}
 📂 Vị trí: ${snapshot.snapshotDir}
 
-💡 Để khôi phục: dùng \`story_rollback\` với id = "${snapshot.id}"`,
+💡 Để khôi phục: dùng \`story_rollback\` với id = "${snapshot.id}"${retentionNote}`,
         }],
       };
     }
@@ -135,6 +180,11 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
     async (params) => {
       const project = requireProject(getProject);
       if (isToolError(project)) return project;
+      // snapshotId đi thẳng vào path.join — validate định dạng trước để
+      // index.json bị sửa tay (id="../../evil") không thoát ra ngoài.
+      if (params.snapshotId && !/^[A-Za-z0-9_-]+$/.test(params.snapshotId)) {
+        return errResult('❌ snapshotId không hợp lệ (chỉ cho phép chữ, số, gạch ngang, gạch dưới).');
+      }
       const snapshotsDir = project.getSnapshotsDir();
       const indexPath = path.join(snapshotsDir, 'index.json');
 
@@ -149,6 +199,10 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
       } else {
         targetSnapshot = index.snapshots[index.snapshots.length - 1];
       }
+      // Kể cả id từ index.json cũng phải sạch (file này user sửa tay được)
+      if (targetSnapshot && !/^[A-Za-z0-9_-]+$/.test(targetSnapshot.id)) {
+        return errResult(`❌ Snapshot "${targetSnapshot.id}" có id không hợp lệ — từ chối rollback để bảo vệ dữ liệu.`);
+      }
 
       if (!targetSnapshot) {
         const available = index.snapshots.map(s => `  - ${s.id} (${s.label}, ${s.createdAt})`).join('\n');
@@ -160,6 +214,33 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
       if (!await exists(snapshotDir)) {
         return errResult(`❌ Thư mục snapshot không tồn tại: ${snapshotDir}`);
       }
+
+      // Tính trước các file sẽ BIẾN MẤT (có ở hiện tại, không có trong
+      // snapshot) để preview cảnh báo rõ ràng thay vì xóa câm.
+      const contentDirs: [string, string][] = [
+        ['manuscript', project.manuscriptDir],
+        ['bible', project.bibleDir],
+        ['outline', project.outlineDir],
+        ['drafts_raw', project.draftsRawDir],
+      ];
+      const deletions: string[] = [];
+      for (const [label, destDir] of contentDirs) {
+        const snapFiles = new Set(await listRelativeFiles(path.join(snapshotDir, label)));
+        const curFiles = await listRelativeFiles(destDir);
+        for (const f of curFiles) {
+          if (!snapFiles.has(f)) deletions.push(`${label}/${f}`);
+        }
+      }
+      // .story/: chỉ xét file top-level, không bao giờ đụng tới snapshots/
+      const snapStoryFiles = new Set(await listRelativeFiles(path.join(snapshotDir, '.story')));
+      let curStoryNames: string[] = [];
+      try {
+        const entries = await fs.readdir(project.storyDir, { withFileTypes: true });
+        curStoryNames = entries.filter(e => e.isFile()).map(e => e.name);
+      } catch {
+        curStoryNames = [];
+      }
+      const storyDeletions = curStoryNames.filter(name => !snapStoryFiles.has(name));
 
       if (!params.confirm) {
         return {
@@ -181,6 +262,11 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
 5. Ghi đè outline/ bằng snapshot
 6. Ghi đè drafts_raw/ bằng snapshot
 
+🗑️ File sẽ BỊ XÓA vì không có trong snapshot (tạo sau thời điểm snapshot):
+${deletions.length > 0 ? summarizeDeletions(deletions) : 'không có'}
+🗑️ File .story/ sẽ bị xóa:
+${storyDeletions.length > 0 ? storyDeletions.map(f => `      - ${f}`).join('\n') : 'không có'}
+
 Để thực hiện, gọi lại với confirm: true.`,
           }],
         };
@@ -197,6 +283,15 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
 
       const snapshotStoryDir = path.join(snapshotDir, '.story');
       if (await exists(snapshotStoryDir)) {
+        // Xóa file .story/ top-level không có trong snapshot (đã liệt kê ở
+        // preview). Không bao giờ đụng tới thư mục snapshots/.
+        for (const name of storyDeletions) {
+          try {
+            await fs.rm(path.join(project.storyDir, name), { force: true });
+          } catch {
+            // bỏ qua file không xóa được, tiếp tục copy phần còn lại
+          }
+        }
         const files = await fs.readdir(snapshotStoryDir);
         for (const file of files) {
           await fs.copyFile(
@@ -218,6 +313,8 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
       await restoreDir(path.join(snapshotDir, 'bible'), project.bibleDir);
       await restoreDir(path.join(snapshotDir, 'outline'), project.outlineDir);
       await restoreDir(path.join(snapshotDir, 'drafts_raw'), project.draftsRawDir);
+      // Mọi thứ có thể đã đổi → graph cache cũ
+      await invalidateIndex(project);
 
       return {
         content: [{

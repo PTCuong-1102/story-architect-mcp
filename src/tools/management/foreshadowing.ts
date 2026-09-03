@@ -14,8 +14,8 @@ export function registerForeshadowingTools(server: McpServer, getProject: () => 
       title: 'Log Setup (Chekhov Gun)',
       description: 'Đánh dấu một chi tiết cài cắm mới (Chekhov\'s Gun) — một setup sẽ cần được payoff sau này.',
       inputSchema: z.object({
-        setup: z.string().describe('Mô tả chi tiết cài cắm'),
-        setupChapter: z.string().describe('Chương đặt chi tiết cài cắm (ví dụ: arc_01/ch_002)'),
+        setup: z.string().min(1).describe('Mô tả chi tiết cài cắm'),
+        setupChapter: z.string().min(1).max(64).describe('Chương đặt chi tiết cài cắm (ví dụ: arc_01/ch_002)'),
         setupLine: z.string().optional().describe('Trích dẫn dòng cài cắm'),
         importance: z.enum(['minor', 'moderate', 'major']).default('moderate')
           .describe('Mức độ quan trọng'),

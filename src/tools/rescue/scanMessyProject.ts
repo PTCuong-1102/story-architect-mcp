@@ -3,7 +3,7 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../../server/StoryProject.js';
-import { walkDir, readFileBuffer, detectTextEncoding, decodeBuffer, getFileSize } from '../../utils/fileUtils.js';
+import { walkDir, readFileBuffer, detectTextEncoding, decodeBuffer, getFileSize, isBlockedScanPath } from '../../utils/fileUtils.js';
 import { countWords } from '../../utils/wordCount.js';
 import type { FileClassification } from '../../server/types.js';
 import { errResult } from '../../utils/mcpResults.js';
@@ -89,12 +89,16 @@ export function registerScanMessyProjectTool(server: McpServer, getProject: () =
       title: 'Scan Messy Novel Project',
       description: 'Quét toàn bộ dự án tiểu thuyết lộn xộn: phát hiện trùng lặp, nhận diện encoding, phân loại file vào 4 nhóm (Manuscript, Notes, Lore, Outline) kèm confidence score.',
       inputSchema: z.object({
-        path: z.string().describe('Đường dẫn đến thư mục dự án cần quét'),
+        path: z.string().min(1).describe('Đường dẫn đến thư mục dự án cần quét'),
         detectDuplicates: z.boolean().default(true).describe('Phát hiện file trùng lặp/tương đồng'),
       }),
     },
     async (params) => {
       const scanPath = params.path;
+
+      if (isBlockedScanPath(path.resolve(scanPath))) {
+        return errResult(`🚫 Từ chối quét thư mục hệ thống: ${scanPath}\n\n💡 Chỉ quét thư mục dự án tiểu thuyết do bạn chỉ định.`);
+      }
 
       try {
         await fs.access(scanPath);
@@ -133,20 +137,35 @@ export function registerScanMessyProjectTool(server: McpServer, getProject: () =
         });
       }
 
+      // So sánh O(n²) nên giới hạn: tối đa 300 file, mỗi file CẮT 50KB đầu
+      // cho mục đích similarity (phân loại vẫn dùng toàn bộ nội dung).
+      // Tránh treo RAM/CPU khi quét thư mục hàng nghìn file.
+      const SIMILARITY_FILE_CAP = 300;
+      const SIMILARITY_CHARS = 50_000;
+      let similarityCapped = false;
       if (params.detectDuplicates) {
-        const paths = [...fileContents.keys()];
+        const allPaths = [...fileContents.keys()];
+        const paths = allPaths.slice(0, SIMILARITY_FILE_CAP);
+        similarityCapped = allPaths.length > paths.length;
+        const snippetOf = (p: string): string => {
+          const full = fileContents.get(p) || '';
+          return full.length > SIMILARITY_CHARS ? full.slice(0, SIMILARITY_CHARS) : full;
+        };
         for (let i = 0; i < paths.length; i++) {
           for (let j = i + 1; j < paths.length; j++) {
-            const contentA = fileContents.get(paths[i])!;
-            const contentB = fileContents.get(paths[j])!;
-            if (contentA.length > 100 && contentB.length > 100) {
-              const sim = simpleSimilarity(contentA, contentB);
-              if (sim > 0.6) {
-                const classA = classifications.find(c => c.path === paths[i]);
-                const classB = classifications.find(c => c.path === paths[j]);
-                if (classA) classA.similarTo.push(`${paths[j]} (${Math.round(sim * 100)}%)`);
-                if (classB) classB.similarTo.push(`${paths[i]} (${Math.round(sim * 100)}%)`);
-              }
+            const contentA = snippetOf(paths[i]);
+            const contentB = snippetOf(paths[j]);
+            if (contentA.length <= 100 || contentB.length <= 100) continue;
+            // Early-exit rẻ: chênh lệch độ dài quá lớn thì không thể giống nhau
+            const lenA = contentA.length;
+            const lenB = contentB.length;
+            if (Math.abs(lenA - lenB) / Math.max(lenA, lenB) > 0.5) continue;
+            const sim = simpleSimilarity(contentA, contentB);
+            if (sim > 0.6) {
+              const classA = classifications.find(c => c.path === paths[i]);
+              const classB = classifications.find(c => c.path === paths[j]);
+              if (classA) classA.similarTo.push(`${paths[j]} (${Math.round(sim * 100)}%)`);
+              if (classB) classB.similarTo.push(`${paths[i]} (${Math.round(sim * 100)}%)`);
             }
           }
         }
@@ -175,7 +194,7 @@ export function registerScanMessyProjectTool(server: McpServer, getProject: () =
 
 📁 Tổng số file: ${files.length}
 📝 Tổng số từ: ${totalWords.toLocaleString()}
-${duplicatePairs > 0 ? `⚠️ File có nội dung tương đồng: ${duplicatePairs}\n` : ''}
+${duplicatePairs > 0 ? `⚠️ File có nội dung tương đồng: ${duplicatePairs}\n` : ''}${similarityCapped ? `ℹ️ So trùng lặp chỉ chạy trên ${SIMILARITY_FILE_CAP} file đầu (giới hạn hiệu năng).\n` : ''}
 📂 Phân loại:
   Manuscript: ${categoryCount.manuscript}
   Notes:      ${categoryCount.notes}

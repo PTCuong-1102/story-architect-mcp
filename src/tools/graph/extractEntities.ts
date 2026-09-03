@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../../server/StoryProject.js';
 import { readTextFile, exists } from '../../utils/fileUtils.js';
+import { invalidateIndex } from '../../utils/knowledgeGraph.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 
 /**
@@ -14,6 +15,8 @@ function extractCapitalizedTerms(text: string): { names: string[]; locations: st
   const cleaned = text.replace(/^#{1,6}\s+/gm, '').replace(/[*_~`]/g, '');
 
   // Match các cụm từ viết hoa tiếng Việt / Anh (ví dụ: "Tiêu Viêm", "Thanh Vân Sơn", "Cửu Long Thần Đỉnh")
+  // Chunk BỊ CẮT tại dấu câu [, . ! ? ; : …] để "Viêm, Thanh" không gộp
+  // thành thực thể rác "Viêm Thanh".
   const words = cleaned.split(/\s+/);
   const capitalizedChunks: string[] = [];
   let currentChunk: string[] = [];
@@ -22,27 +25,36 @@ function extractCapitalizedTerms(text: string): { names: string[]; locations: st
     'Trên', 'Dưới', 'Trong', 'Ngoài', 'Khi', 'Nếu', 'Nhưng', 'Tuy', 'Vì', 'Do', 'Và', 'Hoặc',
     'Chương', 'Arc', 'Phần', 'Tập', 'Hồi', 'Theo', 'Sau', 'Trước', 'Tại', 'Với', 'Một', 'Hai',
     'Ba', 'Bốn', 'Năm', 'Sáu', 'Bảy', 'Tám', 'Chín', 'Mười', 'Đã', 'Đang', 'Sẽ', 'Cậu', 'Anh',
-    'Cô', 'Hắn', 'Nàng', 'Ông', 'Bà', 'Ta', 'Tôi', 'Ngươi', 'Bí', 'Mật', 'Cấm', 'Địa'
+    'Cô', 'Hắn', 'Nàng', 'Ông', 'Bà', 'Ta', 'Tôi', 'Ngươi', 'Bí', 'Mật', 'Cấm', 'Địa',
+    'Hôm', 'Nay', 'Mai', 'Lúc', 'Người', 'Kẻ', 'Ngày', 'Đêm', 'Năm', 'Tháng', 'Giờ',
+    'Nơi', 'Chỗ', 'Bên', 'Cùng', 'Mỗi', 'Mọi', 'Rất', 'Quá', 'Lại', 'Vẫn', 'Còn', 'Hết', 'Cả',
   ]);
 
-  for (const word of words) {
-    const cleanWord = word.replace(/^[^\w\u00C0-\u024F\u1EA0-\u1EF9]+|[^\w\u00C0-\u024F\u1EA0-\u1EF9]+$/g, '');
-    if (cleanWord.length > 1 && /^[A-ZÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝĐẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼỀỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ]/.test(cleanWord)) {
-      if (!ignoreWords.has(cleanWord)) {
-        currentChunk.push(cleanWord);
-        continue;
-      }
-    }
+  const flush = () => {
     if (currentChunk.length > 0) {
       capitalizedChunks.push(currentChunk.join(' '));
       currentChunk = [];
     }
-  }
-  if (currentChunk.length > 0) {
-    capitalizedChunks.push(currentChunk.join(' '));
-  }
+  };
 
-  // Đếm tần suất
+  for (const word of words) {
+    // Token chứa dấu ngắt câu/phẩy → xử lý phần chữ rồi cắt chunk ngay
+    const boundary = /[,.!?;:…]/.test(word);
+    const cleanWord = word.replace(/^[^\w\u00C0-\u024F\u1EA0-\u1EF9]+|[^\w\u00C0-\u024F\u1EA0-\u1EF9]+$/g, '');
+    if (cleanWord.length > 1 && /^[A-ZÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝĐẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼỀỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ]/.test(cleanWord)) {
+      if (!ignoreWords.has(cleanWord)) {
+        currentChunk.push(cleanWord);
+      } else {
+        flush();
+      }
+    } else {
+      flush();
+    }
+    if (boundary) flush();
+  }
+  flush();
+
+  // Đếm tần suất — chỉ giữ chunk xuất hiện ≥ 2 lần để loại từ đầu câu lẻ
   const freqMap = new Map<string, number>();
   for (const chunk of capitalizedChunks) {
     if (chunk.length > 2) {
@@ -50,13 +62,20 @@ function extractCapitalizedTerms(text: string): { names: string[]; locations: st
     }
   }
 
-  // Phân loại đơn giản
+  // Phân loại: marker địa danh phải là từ đầy đủ (không substring) và
+  // không nằm ở đầu cụm — để "Cung cấp thông tin" không thành địa danh.
+  const LOCATION_MARKERS = new Set(['Sơn', 'Đỉnh', 'Thành', 'Động', 'Vực', 'Cung', 'Cấm']);
+  const isLocation = (term: string): boolean => {
+    const tokens = term.split(' ');
+    return tokens.length >= 2 && tokens.some((t, i) => i > 0 && LOCATION_MARKERS.has(t));
+  };
+
   const names: string[] = [];
   const locations: string[] = [];
 
   for (const [term, freq] of freqMap.entries()) {
-    if (freq >= 1) {
-      if (term.includes('Sơn') || term.includes('Đỉnh') || term.includes('Thành') || term.includes('Động') || term.includes('Cung') || term.includes('Vực') || term.includes('Cấm')) {
+    if (freq >= 2) {
+      if (isLocation(term)) {
         locations.push(term);
       } else {
         names.push(term);
@@ -93,11 +112,28 @@ export function registerExtractEntitiesTool(server: McpServer, getProject: () =>
       }
 
       const { names, locations } = extractCapitalizedTerms(content);
-      const existingCharacters = await project.listCharacters();
+
+      // So với TÊN HIỂN THỊ (frontmatter) chứ không phải fileKey snake_case —
+      // nếu không, nhân vật đã có ("Tiêu Viêm" ↔ tieu_viem.md) sẽ bị đề xuất lại.
+      const existingDisplay = new Set<string>();
+      for (const key of await project.listCharacters()) {
+        existingDisplay.add(key.toLowerCase().replace(/_/g, ' '));
+        const profile = await project.getCharacter(key);
+        const fmName = profile?.frontmatter?.name;
+        if (typeof fmName === 'string' && fmName.trim()) {
+          existingDisplay.add(fmName.toLowerCase().trim().replace(/\s+/g, ' '));
+        }
+        const aliases = profile?.frontmatter?.aliases;
+        if (Array.isArray(aliases)) {
+          for (const a of aliases) {
+            if (typeof a === 'string' && a.trim()) existingDisplay.add(a.toLowerCase().trim());
+          }
+        }
+      }
       const existingWorld = await project.listWorldEntries();
 
       // Filter non-existing
-      const newCharacters = names.filter(n => !existingCharacters.map(c => c.toLowerCase()).includes(n.toLowerCase()));
+      const newCharacters = names.filter(n => !existingDisplay.has(n.toLowerCase()));
       const newLocations = locations.filter(l => !existingWorld.map(w => w.toLowerCase()).includes(l.toLowerCase()));
 
       if (!params.confirm) {
@@ -184,6 +220,9 @@ _Mô tả địa danh / bối cảnh ${loc}._
           createdWorld++;
         }
       }
+
+      // Bible đổi → graph cache cũ (nếu có)
+      await invalidateIndex(project);
 
       return {
         content: [{

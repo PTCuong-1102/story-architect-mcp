@@ -4,24 +4,48 @@
  * và inline (link, image, bold, italic, inline code).
  */
 
-/** Escape text để nhúng an toàn vào HTML (dùng chung cho dashboard/export). */
+/**
+ * Escape text để nhúng an toàn vào HTML (dùng chung cho dashboard/export).
+ * Đồng thời loại ký tự điều khiển (trừ \t \n \r) vì chúng làm XML
+ * ill-formed trong content.xhtml của EPUB (EPUBCheck fatal).
+ */
 export function escapeHtml(s: string): string {
   return s
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Chỉ cho phép URL http/https/mailto, anchor, đường dẫn tương đối/tuyệt đối.
+ * Chặn `javascript:`/`data:`/`vbscript:` — file HTML export mở trong
+ * browser sẽ thực thi scheme nguy hiểm khi click.
+ */
+function isSafeUrl(url: string): boolean {
+  const m = url.trim().match(/^([a-z][a-z0-9+.-]*):/i);
+  return !m || ['http', 'https', 'mailto'].includes(m[1].toLowerCase());
+}
+
 function renderInline(raw: string): string {
-  let r = escapeHtml(raw);
-  r = r.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />');
-  r = r.replace(/\[([^\]]*)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-  r = r.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Tách code-span ra placeholder TRƯỚC để link/image/bold không ăn
+  // vào nội dung literal trong backtick (ví dụ `[doc](http://x)`).
+  const codeSpans: string[] = [];
+  let r = escapeHtml(raw).replace(/`([^`]+)`/g, (_m, code: string) => {
+    codeSpans.push(`<code>${code}</code>`);
+    return `\uE000${codeSpans.length - 1}\uE000`;
+  });
+  r = r.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_m, alt: string, src: string) =>
+    isSafeUrl(src) ? `<img src="${src}" alt="${alt}" />` : alt);
+  r = r.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_m, text: string, href: string) =>
+    isSafeUrl(href) ? `<a href="${href}">${text}</a>` : text);
   r = r.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  r = r.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  r = r.replace(/__([^_]+)_/g, '<strong>$1</strong>');
   r = r.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
   r = r.replace(/(^|[^_])_([^_\n]+)_/g, '$1<em>$2</em>');
+  // Khôi phục code-span
+  r = r.replace(/\uE000(\d+)\uE000/g, (_m, i: string) => codeSpans[Number(i)] ?? '');
   return r;
 }
 

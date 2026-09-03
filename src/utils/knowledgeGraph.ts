@@ -127,6 +127,19 @@ export function buildIndex(project: StoryProject): Promise<KnowledgeGraphIndex> 
   })();
 }
 
+/**
+ * Xóa cache .cbm/index.json để lần query tới build lại từ dữ liệu mới.
+ * Gọi sau mọi thao tác ghi vào bible/relationships/timeline (nếu không
+ * story_query_context sẽ phục vụ đồ thị cũ). Không throw khi xóa lỗi.
+ */
+export async function invalidateIndex(project: StoryProject): Promise<void> {
+  try {
+    await fs.unlink(path.join(project.projectPath, '.cbm', 'index.json'));
+  } catch {
+    // cache chưa tồn tại — không có gì để xóa
+  }
+}
+
 /** Đọc cache .cbm/index.json nếu có, ngược lại build mới và ghi cache. */
 export async function loadOrBuildIndex(project: StoryProject, forceRebuild = false): Promise<KnowledgeGraphIndex> {
   if (!forceRebuild) {

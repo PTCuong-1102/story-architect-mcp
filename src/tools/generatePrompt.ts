@@ -13,8 +13,8 @@ export function registerGenerateWritingPromptTool(server: McpServer, getProject:
       title: 'Generate Optimized Writing Prompt',
       description: 'Đọc chương trước + Dàn ý + Lore + Style Guide + Chekhov Guns → Tạo System Prompt gọt giũa hoàn hảo cho lượt viết tiếp theo.',
       inputSchema: z.object({
-        arc: z.string().describe('Arc ID (ví dụ: arc_01)'),
-        chapter: z.string().describe('Chapter ID (ví dụ: ch_003)'),
+        arc: z.string().min(1).max(64).describe('Arc ID (ví dụ: arc_01)'),
+        chapter: z.string().min(1).max(64).describe('Chapter ID (ví dụ: ch_003)'),
         strategy: z.enum(['continue', 'rewrite', 'expand']).default('continue')
           .describe('Chiến lược viết: continue (viết tiếp), rewrite (viết lại), expand (mở rộng)'),
       }),

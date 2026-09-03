@@ -8,6 +8,7 @@ import {
   exists,
   findMarkdownFiles,
   isSafePathSegment,
+  compareNatural,
 } from '../utils/fileUtils.js';
 import { countWords } from '../utils/wordCount.js';
 import {
@@ -127,22 +128,24 @@ export class StoryProject {
 
   /**
    * Ghi nhận tiến độ viết (writing progress):
-   * so sánh word count hiện tại với mốc đã lưu trước đó, nếu có delta dương
-   * thì bổ sung entry vào writingLog và cập nhật lastWrittenAt.
-   * Trả về status đã lưu (dùng để tính writing velocity).
+   * so sánh word count hiện tại với mốc đã lưu. Delta ÂM (rollback/xóa)
+   * vẫn được log để velocity trung thực; entry 0 từ không tạo ngày mới
+   * (tránh phình mẫu số); lastWrittenAt chỉ chạm khi có ghi nhận thật
+   * (đọc stats không còn side-effect).
    */
   async recordWritingProgress(chapterRef?: string): Promise<StoryStatus> {
     const raw = await readJsonFile<unknown>(this.statusPath());
     const stored = raw ? StoryStatusSchema.parse(raw) : StoryStatusSchema.parse({});
     const currentWordCount = await this.calculateTotalWordCount();
 
-    const delta = Math.max(0, currentWordCount - (stored.totalWordCount || 0));
+    const delta = currentWordCount - (stored.totalWordCount || 0);
 
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
     const writingLog = [...stored.writingLog];
+    let touched = false;
 
-    if (delta > 0 || chapterRef) {
+    if (delta !== 0) {
       const lastEntry = writingLog[writingLog.length - 1];
       if (lastEntry && lastEntry.date === today) {
         lastEntry.wordsWritten += delta;
@@ -156,12 +159,21 @@ export class StoryProject {
           chaptersWorked: chapterRef ? [chapterRef] : [],
         });
       }
+      touched = true;
+    } else if (chapterRef) {
+      // Chạm chương nhưng không thêm chữ: chỉ gắn chapter vào entry hôm nay
+      // nếu đã có, không tạo ngày mới.
+      const lastEntry = writingLog[writingLog.length - 1];
+      if (lastEntry && lastEntry.date === today && !lastEntry.chaptersWorked.includes(chapterRef)) {
+        lastEntry.chaptersWorked.push(chapterRef);
+        touched = true;
+      }
     }
 
     const updated: StoryStatus = {
       ...stored,
       totalWordCount: currentWordCount,
-      lastWrittenAt: now.toISOString(),
+      lastWrittenAt: touched ? now.toISOString() : stored.lastWrittenAt,
       writingLog,
     };
     await writeJsonFile(this.statusPath(), updated);
@@ -251,6 +263,8 @@ export class StoryProject {
   }
 
   async getCharacter(name: string): Promise<{ frontmatter: Record<string, unknown>; content: string } | null> {
+    // Chặn path traversal qua resource template story://bible/characters/{name}
+    if (!isSafePathSegment(name) && !isSafePathSegment(name.toLowerCase().replace(/\s+/g, '_'))) return null;
     const charDir = path.join(this.bibleDir, 'characters');
     const possiblePaths = [
       path.join(charDir, `${name}.md`),
@@ -280,6 +294,8 @@ export class StoryProject {
   }
 
   async getWorldEntry(name: string): Promise<string | null> {
+    // Chặn path traversal qua resource template story://bible/world/{location}
+    if (!isSafePathSegment(name) && !isSafePathSegment(name.toLowerCase().replace(/\s+/g, '_'))) return null;
     const worldDir = path.join(this.bibleDir, 'world');
     const possiblePaths = [
       path.join(worldDir, `${name}.md`),
@@ -312,6 +328,12 @@ export class StoryProject {
     if (!isSafePathSegment(arc) || !isSafePathSegment(chapter)) {
       throw new Error(`Đường dẫn không hợp lệ: ${arc}/${chapter}`);
     }
+    if (content.trim().length === 0) {
+      throw new Error('Nội dung chương rỗng — không tạo file.');
+    }
+    // Chặn heading-injection qua title (newline → space, giới hạn dài)
+    const safeTitle = title?.replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+
     const arcDir = path.join(this.manuscriptDir, arc);
     await fs.mkdir(arcDir, { recursive: true });
 
@@ -319,8 +341,8 @@ export class StoryProject {
     const isNew = !(await exists(filePath));
 
     let finalContent = content.trim();
-    if (title && !finalContent.startsWith('#')) {
-      finalContent = `# ${title}\n\n${finalContent}`;
+    if (safeTitle && !finalContent.startsWith('#')) {
+      finalContent = `# ${safeTitle}\n\n${finalContent}`;
     }
     if (!finalContent.endsWith('\n')) {
       finalContent += '\n';
@@ -350,7 +372,8 @@ export class StoryProject {
     const filePath = path.join(arcDir, `${chapter}.md`);
     let currentContent = (await readTextFile(filePath)) || '';
 
-    const headingPart = sceneHeading ? `\n\n### ${sceneHeading}\n\n` : '\n\n---\n\n';
+    const safeHeading = sceneHeading?.replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+    const headingPart = safeHeading ? `\n\n### ${safeHeading}\n\n` : '\n\n---\n\n';
     const updatedContent = (currentContent.trim() + headingPart + sceneContent.trim()).trim() + '\n';
 
     await fs.writeFile(filePath, updatedContent, 'utf-8');
@@ -369,7 +392,7 @@ export class StoryProject {
       return entries
         .filter(e => e.isDirectory() && isSafePathSegment(e.name))
         .map(e => e.name)
-        .sort();
+        .sort(compareNatural);
     } catch {
       return [];
     }
@@ -385,7 +408,7 @@ export class StoryProject {
         .filter(f => f.endsWith('.md'))
         .map(f => f.replace('.md', ''))
         .filter(f => isSafePathSegment(f))
-        .sort();
+        .sort(compareNatural);
     } catch {
       return [];
     }

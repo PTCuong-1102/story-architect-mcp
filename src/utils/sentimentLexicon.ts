@@ -843,18 +843,15 @@ function stripMarkdown(text: string): string {
  * Tokenize text thành mảng tokens (hỗ trợ multi-word Vietnamese).
  * Ưu tiên match multi-word tokens trong lexicon trước.
  */
+/**
+ * Marker biên câu trong luồng token: phủ định/tăng cường không được
+ * tràn qua nó ("Không. Tôi rất vui." — "không" không phủ "vui" câu sau).
+ */
+export const SENTENCE_BOUNDARY = '￭';
+
 function tokenize(text: string): string[] {
   const lower = text.toLowerCase();
   const tokens: string[] = [];
-
-  // Tách cơ bản trên whitespace/punctuation.
-  // Bao gồm . ! ? … để từ cuối câu ("vui.", "buồn!") vẫn match được lexicon;
-  // emoticon đã được extractEmoticons() tách ra trước nên không lo mất.
-  const rawTokens = lower
-    .split(/[\s,;:()[\]{}"'""「」『』—–\-._!?…/\\|]+/)
-    .map(t => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')) // gọt dấu câu dính đầu/cuối
-    .filter(t => t.length > 0)
-    .map(normalizeToken); // gộp chữ kéo dài + biến thể cười/khóc
 
   // Ghép multi-word tokens (2-word và 3-word).
   // Mỗi ứng viên check cả dạng gốc lẫn không dấu để text teen/chat
@@ -865,29 +862,48 @@ function tokenize(text: string): string[] {
     INTENSIFIERS.has(s) ||
     getUnaccentedLexicon().has(stripDiacritics(s));
 
-  let i = 0;
-  while (i < rawTokens.length) {
-    // Thử 3-word compound
-    if (i + 2 < rawTokens.length) {
-      const tri = `${rawTokens[i]} ${rawTokens[i + 1]} ${rawTokens[i + 2]}`;
-      if (matchesKnown(tri)) {
-        tokens.push(tri);
-        i += 3;
-        continue;
+  const pushCompounded = (words: string[]): void => {
+    let i = 0;
+    while (i < words.length) {
+      // Thử 3-word compound
+      if (i + 2 < words.length) {
+        const tri = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+        if (matchesKnown(tri)) {
+          tokens.push(tri);
+          i += 3;
+          continue;
+        }
       }
-    }
-    // Thử 2-word compound
-    if (i + 1 < rawTokens.length) {
-      const bi = `${rawTokens[i]} ${rawTokens[i + 1]}`;
-      if (matchesKnown(bi)) {
-        tokens.push(bi);
-        i += 2;
-        continue;
+      // Thử 2-word compound
+      if (i + 1 < words.length) {
+        const bi = `${words[i]} ${words[i + 1]}`;
+        if (matchesKnown(bi)) {
+          tokens.push(bi);
+          i += 2;
+          continue;
+        }
       }
+      tokens.push(words[i]);
+      i++;
     }
-    tokens.push(rawTokens[i]);
-    i++;
-  }
+  };
+
+  // Tách theo câu để chèn marker biên (giữ . ! ? … làm delimiter).
+  // Emoticon đã được extractEmoticons() tách ra trước nên không lo mất.
+  // Compound chỉ ghép trong phạm vi một câu, không tràn qua marker.
+  const sentences = lower.split(/[.!?…]+/);
+  sentences.forEach((sentence, idx) => {
+    const words = sentence
+      .split(/[\s,;:()[\]{}"'""「」『』—–\-_/\\|]+/)
+      .map(t => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')) // gọt dấu câu dính đầu/cuối
+      .filter(t => t.length > 0)
+      .map(normalizeToken); // gộp chữ kéo dài + biến thể cười/khóc
+    // Ngăn cách các câu bằng marker (trừ trước câu đầu / quanh câu rỗng)
+    if (idx > 0 && tokens.length > 0 && words.length > 0) {
+      tokens.push(SENTENCE_BOUNDARY);
+    }
+    pushCompounded(words);
+  });
 
   return tokens;
 }
@@ -913,13 +929,26 @@ function findDominant(scores: EmotionScores): EmotionTag {
   return dominant;
 }
 
-/** Normalize emotion scores thành phần trăm (tổng = 100). */
+/**
+ * Normalize emotion scores thành phần trăm (tổng đúng = 100).
+ * Dùng largest-remainder thay vì round từng ô (round lẻ tổng 99/101%).
+ */
 function normalizeScores(raw: EmotionScores): EmotionScores {
   const total = ALL_EMOTIONS.reduce((sum, tag) => sum + raw[tag], 0);
   if (total === 0) return emptyEmotionScores();
   const normalized = emptyEmotionScores();
+  const remainders: { tag: EmotionTag; frac: number }[] = [];
+  let assigned = 0;
   for (const tag of ALL_EMOTIONS) {
-    normalized[tag] = Math.round((raw[tag] / total) * 100);
+    const exact = (raw[tag] / total) * 100;
+    const floored = Math.floor(exact);
+    normalized[tag] = floored;
+    assigned += floored;
+    remainders.push({ tag, frac: exact - floored });
+  }
+  remainders.sort((a, b) => b.frac - a.frac);
+  for (let i = 0; i < 100 - assigned; i++) {
+    normalized[remainders[i % remainders.length].tag]++;
   }
   return normalized;
 }
@@ -957,7 +986,7 @@ export function analyzeSentiment(text: string): SentimentResult {
     sentimentWordCount += negEmo;
   }
 
-  const totalWords = tokens.length + posEmo + negEmo;
+  const totalWords = tokens.filter(t => t !== SENTENCE_BOUNDARY).length + posEmo + negEmo;
 
   // State machine
   let negationWindow = 0;
@@ -965,6 +994,13 @@ export function analyzeSentiment(text: string): SentimentResult {
   let intensifierMul = 1;
 
   for (const token of tokens) {
+    // Biên câu: phủ định/tăng cường không tràn sang câu khác
+    if (token === SENTENCE_BOUNDARY) {
+      negationWindow = 0;
+      intensifierMul = 1;
+      continue;
+    }
+
     // Check negator
     const negVal = NEGATORS.get(token);
     if (negVal !== undefined) {
@@ -973,10 +1009,11 @@ export function analyzeSentiment(text: string): SentimentResult {
       continue;
     }
 
-    // Check intensifier
+    // Check intensifier: cộng dồn có trần (rất rất = 2.25x, trần 3x),
+    // và KHÔNG bị từ trung tính xóa (chỉ reset khi gặp từ cảm xúc/biên câu)
     const intVal = INTENSIFIERS.get(token);
     if (intVal !== undefined) {
-      intensifierMul = intVal;
+      intensifierMul = Math.min(3, intensifierMul * intVal);
       continue;
     }
 
@@ -1007,7 +1044,6 @@ export function analyzeSentiment(text: string): SentimentResult {
       }
     } else {
       if (negationWindow > 0) negationWindow--;
-      intensifierMul = 1;
     }
   }
 

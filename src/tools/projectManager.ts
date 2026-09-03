@@ -167,7 +167,7 @@ export function registerProjectManagerTools(
       title: 'Set Story Project Path',
       description: 'Thiết lập hoặc chuyển đổi dự án tiểu thuyết đích. Tự động phát hiện và từ chối dự án code (Node.js, Python, Rust, v.v.) để tránh lãng phí tài nguyên. Dùng force=true để bỏ qua kiểm tra.',
       inputSchema: z.object({
-        projectPath: z.string().describe('Đường dẫn đến thư mục dự án tiểu thuyết (tuyệt đối hoặc tương đối so với cwd)'),
+        projectPath: z.string().min(1).describe('Đường dẫn đến thư mục dự án tiểu thuyết (tuyệt đối hoặc tương đối so với cwd)'),
         force: z.boolean().default(false).describe('Bỏ qua kiểm tra loại dự án (dùng khi muốn khởi tạo dự án mới trong thư mục bất kỳ)'),
       }),
     },

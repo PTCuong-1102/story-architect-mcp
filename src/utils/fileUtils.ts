@@ -124,7 +124,39 @@ export function isSafePathSegment(segment: string): boolean {
   if (segment === '.' || segment === '..') return false;
   if (segment.includes('/') || segment.includes('\\') || segment.includes('\0')) return false;
   if (segment.includes('..')) return false;
+  // Chặn ký tự điều khiển/newline (tên file chứa \n) và tên quá dài
+  // (giới hạn thực tế của hầu hết FS). Giữ fail-closed.
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(segment)) return false;
+  if (segment.length > 128) return false;
+  if (segment !== segment.trim()) return false;
   return true;
+}
+
+/**
+ * So sánh chuỗi tự nhiên: cụm số so theo giá trị số (ch_002 < ch_010,
+ * arc_2 < arc_10), phần còn lại theo locale tiếng Việt.
+ * Dùng cho sort arc/chapter — `.sort()` mặc định xếp sai từ 10 chương trở lên.
+ */
+export function compareNatural(a: string, b: string): number {
+  return a.localeCompare(b, 'vi', { numeric: true });
+}
+
+const SYSTEM_SCAN_BLOCKLIST = [
+  '/', '/etc', '/root', '/proc', '/sys', '/dev',
+  '/bin', '/sbin', '/usr', '/var', '/opt', '/boot',
+];
+
+/**
+ * Chặn quét/refactor vào thư mục hệ thống (/, /etc, /proc...).
+ * Các tool scan nhận path tùy ý từ LLM — đây là rào chắn chống
+ * prompt-injection dụ agent đọc toàn bộ hệ thống. Trả về true = cấm.
+ */
+export function isBlockedScanPath(resolvedPath: string): boolean {
+  const norm = resolvedPath.replace(/\\/g, '/').replace(/\/+$/, '') || '/';
+  if (/^[a-z]:$/i.test(norm)) return true; // drive root Windows (C:)
+  if (/^[a-z]:\/windows(\/|$)/i.test(norm)) return true;
+  return SYSTEM_SCAN_BLOCKLIST.some(r => norm === r || norm.startsWith(r + '/'));
 }
 
 /**

@@ -68,6 +68,15 @@ Bạn là một **Tiểu Thuyết Gia Chuyên Nghiệp kiêm Tổng Biên Tập 
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
+      // Không lặng lẽ ghi đè skill user đã tùy biến: backup khi khác nội dung
+      if (fs.existsSync(target)) {
+        const current = fs.readFileSync(target, 'utf-8');
+        if (current !== skillContent) {
+          const backup = `${target}.bak.${Date.now()}`;
+          fs.copyFileSync(target, backup);
+          console.log(`  💾 Đã backup skill cũ tại: ${backup}`);
+        }
+      }
       fs.writeFileSync(target, skillContent, 'utf-8');
       console.log(`  ✅ Đã cài đặt Skill vào: ${target}`);
       count++;

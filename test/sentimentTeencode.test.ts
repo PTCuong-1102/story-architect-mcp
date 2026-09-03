@@ -63,4 +63,16 @@ describe('sentimentLexicon: teencode & tiếng Việt mạng', () => {
     const r = analyzeSentiment('Buồn! Đau đớn? Tuyệt vọng.');
     assert.ok(r.polarity < -0.3, `phải âm rõ, nhận: ${r.polarity}`);
   });
+
+  it('phủ định không tràn qua biên câu', () => {
+    const r = analyzeSentiment('Không. Tôi rất vui.');
+    assert.ok(r.polarity > 0, `"không" ở câu trước không được phủ "vui" câu sau, nhận: ${r.polarity}`);
+  });
+
+  it('intensifier cộng dồn có trần, không bị từ trung tính xóa', () => {
+    const single = analyzeSentiment('Hắn đau đớn.');
+    const stacked = analyzeSentiment('Hắn rất rất đau đớn.');
+    assert.ok(Math.abs(stacked.polarity) > Math.abs(single.polarity), 'rất rất phải mạnh hơn');
+    assert.ok(Math.abs(stacked.polarity) <= 1, 'polarity phải nằm trong [-1, 1]');
+  });
 });

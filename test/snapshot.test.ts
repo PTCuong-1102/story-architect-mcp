@@ -50,7 +50,8 @@ test('createSnapshot: sao chép metadata, manuscript, bible và cập nhật ind
   assert.equal(snap.label, 'before-edit');
   assert.equal(snap.description, 'kiểm thử');
   // 7 file meta (.story) + 1 chương manuscript
-  assert.equal(snap.fileCount, 8);
+  // 8 file metadata init tạo + 1 file manuscript seed
+  assert.equal(snap.fileCount, 9);
 
   // File đã được sao chép vào thư mục snapshot
   const snapDir = snap.snapshotDir;

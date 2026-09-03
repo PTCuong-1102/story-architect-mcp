@@ -3,37 +3,76 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import type { Relationship } from '../../server/types.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
+import { invalidateIndex } from '../../utils/knowledgeGraph.js';
 
 /**
  * Tự phân tích bản thảo: đếm tần suất hai nhân vật cùng xuất hiện trong một chương.
  * Trả về danh sách các cặp có co-occurrence đạt ngưỡng trở lên.
+ *
+ * So khớp theo TÊN HIỂN THỊ (frontmatter name + aliases), không phải fileKey
+ * snake_case — vì văn xuôi viết "Tiêu Viêm" chứ không bao giờ viết "tieu_viem".
+ * Match theo ranh giới từ (ký tự không phải chữ/không phải số hai bên) để
+ * tên ngắn như "An" không khớp nhầm "lan/thanh/toàn".
  */
+interface CharacterRef {
+  /** Tên hiển thị chuẩn (frontmatter name hoặc fileKey). */
+  display: string;
+  /** Các biến thể chữ thường để so khớp (fileKey→space, name, aliases). */
+  variants: string[];
+}
+
+async function resolveCharacterRefs(project: StoryProject): Promise<CharacterRef[]> {
+  const refs: CharacterRef[] = [];
+  for (const key of await project.listCharacters()) {
+    const profile = await project.getCharacter(key);
+    const fmName = typeof profile?.frontmatter?.name === 'string' && (profile.frontmatter.name as string).trim()
+      ? (profile.frontmatter.name as string).trim()
+      : key;
+    const aliases = Array.isArray(profile?.frontmatter?.aliases)
+      ? (profile.frontmatter.aliases as unknown[]).filter((a): a is string => typeof a === 'string')
+      : [];
+    const variants = new Set<string>();
+    for (const v of [key.replace(/_/g, ' '), fmName, ...aliases]) {
+      const norm = v.toLowerCase().trim().replace(/\s+/g, ' ');
+      if (norm.length > 0) variants.add(norm);
+    }
+    refs.push({ display: fmName, variants: [...variants] });
+  }
+  return refs;
+}
+
+/** Chuẩn hóa văn bản về dạng chỉ còn chữ/số cách nhau bởi space để match từ. */
+function normalizeForMatch(text: string): string {
+  return ' ' + text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim() + ' ';
+}
+
 async function autoDetectCooccurrences(
   project: StoryProject,
   minChapters = 2
 ): Promise<{ a: string; b: string; chapters: number }[]> {
-  const characters = await project.listCharacters();
+  const characters = await resolveCharacterRefs(project);
   const arcs = await project.listArcs();
   if (characters.length < 2 || arcs.length === 0) return [];
 
-  // Chuẩn hóa tên để so khớp
-  const norm = (s: string) => s.toLowerCase().trim();
-
   // Map: pair key "a|b" (đã sort) → số chương cùng xuất hiện
   const pairCount = new Map<string, number>();
+  const displayByKey = new Map<string, string>();
 
   for (const arc of arcs) {
     const chapters = await project.listChaptersInArc(arc);
     for (const ch of chapters) {
       const content = await project.getChapterContent(arc, ch);
       if (!content) continue;
-      const lower = content.toLowerCase();
+      const haystack = normalizeForMatch(content);
 
-      const present = characters.filter(c => lower.includes(norm(c)));
+      const present = characters.filter(c =>
+        c.variants.some(v => haystack.includes(` ${v} `))
+      );
       for (let i = 0; i < present.length; i++) {
         for (let j = i + 1; j < present.length; j++) {
-          const key = [present[i], present[j]].sort().join('|');
+          const key = [present[i].display, present[j].display].sort().join('|');
           pairCount.set(key, (pairCount.get(key) || 0) + 1);
+          displayByKey.set(key, key);
         }
       }
     }
@@ -42,7 +81,7 @@ async function autoDetectCooccurrences(
   const results: { a: string; b: string; chapters: number }[] = [];
   for (const [key, count] of pairCount.entries()) {
     if (count >= minChapters) {
-      const [a, b] = key.split('|');
+      const [a, b] = (displayByKey.get(key) || key).split('|');
       results.push({ a, b, chapters: count });
     }
   }
@@ -64,7 +103,7 @@ export function registerMapRelationshipsTool(server: McpServer, getProject: () =
         ]).optional().describe('Loại mối quan hệ'),
         description: z.string().default('').describe('Mô tả mối quan hệ'),
         chapter: z.string().optional().describe('Chương diễn ra biến động quan hệ'),
-        minChapters: z.number().default(2).describe('Ngưỡng số chương đồng xuất hiện (chế độ tự quét)'),
+        minChapters: z.number().int().min(1).default(2).describe('Ngưỡng số chương đồng xuất hiện (chế độ tự quét)'),
       }),
     },
     async (params) => {
@@ -133,6 +172,8 @@ export function registerMapRelationshipsTool(server: McpServer, getProject: () =
         }
 
         await project.saveRelationships(data);
+        // Đồ thị đổi → graph cache cũ
+        await invalidateIndex(project);
 
         return {
           content: [{
@@ -194,6 +235,8 @@ ${report.join('\n')}
       }
 
       await project.saveRelationships(data);
+      // Đồ thị đổi → graph cache cũ
+      await invalidateIndex(project);
 
       return {
         content: [{

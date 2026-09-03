@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import * as zlib from 'node:zlib';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { StoryProject } from '../src/server/StoryProject.js';
 import { registerExportTool } from '../src/tools/export.js';
@@ -47,7 +48,9 @@ function readZipEntries(buf: Buffer): { name: string; data: Buffer; method: numb
     const nameLen = buf.readUInt16LE(pos + 26);
     const extraLen = buf.readUInt16LE(pos + 28);
     const name = buf.slice(pos + 30, pos + 30 + nameLen).toString('utf-8');
-    const data = buf.slice(pos + 30 + nameLen + extraLen, pos + 30 + nameLen + extraLen + compSize);
+    const raw = buf.slice(pos + 30 + nameLen + extraLen, pos + 30 + nameLen + extraLen + compSize);
+    // Giải nén khi entry dùng DEFLATE (method 8); STORED (0) giữ nguyên
+    const data = method === 8 ? zlib.inflateRawSync(raw) : raw;
     entries.push({ name, data, method });
     pos += 30 + nameLen + extraLen + compSize;
   }
@@ -119,6 +122,12 @@ test('story_export: epub là ZIP hợp lệ, mimetype STORED đứng đầu, đ�
     assert.ok(names.includes(required), `thiếu entry ${required}`);
   }
 
+  // Mọi entry trừ mimetype phải nén DEFLATE để file gọn
+  for (const e of entries) {
+    if (e.name === 'mimetype') continue;
+    assert.equal(e.method, 8, `entry ${e.name} phải nén DEFLATE`);
+  }
+
   // content.xhtml chứa cả 3 chương đã escape
   const contentXhtml = entries.find(e => e.name === 'OEBPS/content.xhtml')!.data.toString();
   assert.match(contentXhtml, /id="ch_001"/);
@@ -144,12 +153,38 @@ test('story_export: docx là ZIP hợp lệ với document.xml WordprocessingML'
   }
 
   const docXml = readZipEntries(buf).find(e => e.name === 'word/document.xml')!.data.toString();
+  const stylesXml = readZipEntries(buf).find(e => e.name === 'word/styles.xml')!.data.toString();
 
   // Heading1 cho tên chương, Title cho tên truyện
   assert.match(docXml, /w:val="Title"/);
   assert.match(docXml, /w:val="Heading1"/);
+  // Style Normal mặc định phải tồn tại (Word strict mode không báo repair)
+  assert.match(stylesXml, /w:styleId="Normal"/);
+  assert.match(stylesXml, /w:docDefaults/);
   // Nội dung tiếng Việt giữ nguyên vẹn
   assert.ok(docXml.includes('Chương một mở đầu.'));
+});
+
+test('story_export: ký tự điều khiển trong chương không làm corrupt EPUB', async () => {
+  const p = await freshProject();
+  await fs.writeFile(
+    path.join(p.manuscriptDir, 'arc_01', 'ch_001.md'),
+    'Chương có ký tự lạ\x07 và null\x00 giữa câu.',
+    'utf-8'
+  );
+
+  const { server, handlers } = makeFakeServer();
+  registerExportTool(server, () => p);
+
+  const outPath = path.join(p.projectPath, 'export', 'out.epub');
+  const result = await handlers.get('story_export')!({ format: 'epub', outputPath: outPath } as never);
+  assert.equal((result as { isError?: boolean }).isError, undefined);
+
+  const buf = await fs.readFile(outPath);
+  const contentXhtml = readZipEntries(buf).find(e => e.name === 'OEBPS/content.xhtml')!.data.toString();
+  // eslint-disable-next-line no-control-regex
+  assert.ok(!/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(contentXhtml), 'XML chứa ký tự điều khiển');
+  assert.ok(contentXhtml.includes('Chương có ký tự lạ'), 'nội dung còn lại phải giữ nguyên');
 });
 
 test('story_export: mặc định ghi vào export/<tên_chuẩn_hóa>.<ext>', async () => {

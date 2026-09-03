@@ -17,9 +17,9 @@ export function registerManuscriptAuthoringTools(
       title: 'Write or Update Chapter Draft',
       description: 'Lưu hoặc cập nhật nội dung chương truyện vào manuscript/<arc>/<chapter>.md. Tự động snapshot backup an toàn nếu sửa chương cũ và ghi nhận tiến độ viết.',
       inputSchema: z.object({
-        arc: z.string().describe('Tên Arc (ví dụ: "arc_01")'),
-        chapter: z.string().describe('Tên Chapter (ví dụ: "ch_001")'),
-        content: z.string().describe('Nội dung văn bản chương (Markdown)'),
+        arc: z.string().min(1).max(64).describe('Tên Arc (ví dụ: "arc_01")'),
+        chapter: z.string().min(1).max(64).describe('Tên Chapter (ví dụ: "ch_001")'),
+        content: z.string().min(1).describe('Nội dung văn bản chương (Markdown)'),
         title: z.string().optional().describe('Tiêu đề chương (ví dụ: "Khởi Đầu Định Mệnh")'),
         autoSnapshot: z.boolean().default(true).describe('Tự động tạo snapshot backup trước khi ghi đè chương đã có'),
       }),
@@ -87,9 +87,9 @@ ${snapshotNote}
       title: 'Append Scene to Chapter',
       description: 'Nối thêm một phân cảnh (scene) vào cuối chương truyện hiện có mà không làm mất nội dung trước đó.',
       inputSchema: z.object({
-        arc: z.string().describe('Tên Arc (ví dụ: "arc_01")'),
-        chapter: z.string().describe('Tên Chapter (ví dụ: "ch_001")'),
-        content: z.string().describe('Nội dung phân cảnh cần nối thêm'),
+        arc: z.string().min(1).max(64).describe('Tên Arc (ví dụ: "arc_01")'),
+        chapter: z.string().min(1).max(64).describe('Tên Chapter (ví dụ: "ch_001")'),
+        content: z.string().min(1).describe('Nội dung phân cảnh cần nối thêm'),
         sceneHeading: z.string().optional().describe('Tiêu đề phân cảnh (nếu có, ví dụ: "Cuộc Gặp Dưới Mưa")'),
       }),
     },
@@ -134,8 +134,8 @@ ${snapshotNote}
       title: 'Read Chapter Content & Metadata',
       description: 'Đọc toàn bộ nội dung của một chương truyện, kèm thống kê số từ và danh sách tiêu đề phân cảnh.',
       inputSchema: z.object({
-        arc: z.string().describe('Tên Arc (ví dụ: "arc_01")'),
-        chapter: z.string().describe('Tên Chapter (ví dụ: "ch_001")'),
+        arc: z.string().min(1).max(64).describe('Tên Arc (ví dụ: "arc_01")'),
+        chapter: z.string().min(1).max(64).describe('Tên Chapter (ví dụ: "ch_001")'),
       }),
     },
     async (params) => {

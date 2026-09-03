@@ -3,22 +3,21 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import type { TimelineEvent } from '../../server/types.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
+import { compareNatural } from '../../utils/fileUtils.js';
+import { invalidateIndex } from '../../utils/knowledgeGraph.js';
 
-/** Trích các thành phần số từ chuỗi (ví dụ "arc_01/ch_002" → [1, 2]). */
-function numericParts(s: string): number[] {
-  return (s.toLowerCase().match(/\d+/g) || []).map(Number);
+/** So sánh hai chuỗi chương theo thứ tự tự nhiên (dùng chung với StoryProject). */
+function compareChapter(a: string, b: string): number {
+  return compareNatural(a, b);
 }
 
-/** So sánh hai chuỗi chương theo thứ tự tự nhiên (1 < 2 < 10, arc_1 < arc_2). */
-function compareChapter(a: string, b: string): number {
-  const pa = numericParts(a);
-  const pb = numericParts(b);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const va = pa[i] ?? 0;
-    const vb = pb[i] ?? 0;
-    if (va !== vb) return va - vb;
-  }
-  return a.localeCompare(b);
+/**
+ * relativeOrder = 0 nghĩa là "chưa đặt" (giá trị default của schema),
+ * không phải thứ tự thật. Mọi so sánh thứ tự phải bỏ qua khi gặp 0,
+ * nếu không sẽ báo "song song"/"mâu thuẫn" giả hàng loạt.
+ */
+function hasOrder(e: TimelineEvent): boolean {
+  return (e.relativeOrder ?? 0) !== 0;
 }
 
 function parseAbsoluteDate(value?: string): Date | null {
@@ -125,7 +124,7 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
       description: 'Phân tích các mốc thời gian tuyệt đối & tương đối, sự kiện, địa điểm và nhân vật để phát hiện mâu thuẫn timeline (như phân thân xuất hiện ở 2 nơi cùng lúc, đảo ngược thứ tự sự kiện). Hỗ trợ các tuyến truyện song song (Threads/Subplots) và xuất biểu đồ Mermaid trực quan.',
       inputSchema: z.object({
         addEvent: z.object({
-          label: z.string().describe('Tên sự kiện'),
+          label: z.string().min(1).max(300).describe('Tên sự kiện'),
           description: z.string().optional(),
           chapter: z.string().optional().describe('Chương diễn ra sự kiện'),
           absoluteDate: z.string().optional().describe('Mốc thời gian tuyệt đối (YYYY-MM-DD hoặc in-world date)'),
@@ -160,6 +159,8 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
           thread: params.addEvent.thread,
         });
         await project.saveTimeline(timeline);
+        // Timeline đổi → graph cache cũ
+        await invalidateIndex(project);
       }
 
       const events = timeline.events;
@@ -188,31 +189,37 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
             }
           }
 
-          // 2. Mâu thuẫn thứ tự trong cùng 1 Thread hoặc cùng Nhân vật
-          if (sameThread || commonChars.length > 0) {
+          // 2. Mâu thuẫn thứ tự trong cùng 1 Thread hoặc cùng Nhân vật.
+          // So dấu hai chiều (trước đây chỉ check một chiều nên miss ~50%
+          // tùy thứ tự lưu events); bỏ qua khi order chưa đặt (= 0).
+          if ((sameThread || commonChars.length > 0) && hasOrder(evA) && hasOrder(evB)) {
             if (evA.chapter && evB.chapter && evA.chapter !== evB.chapter) {
               const chapterOrder = compareChapter(evA.chapter, evB.chapter);
-              if (chapterOrder > 0 && evA.relativeOrder < evB.relativeOrder) {
+              const orderDiff = evA.relativeOrder - evB.relativeOrder;
+              if (chapterOrder !== 0 && orderDiff !== 0 && Math.sign(chapterOrder) !== Math.sign(orderDiff)) {
                 conflicts.push(
-                  `⚠️ Mâu thuẫn thứ tự chương: "${evA.label}" (${evA.chapter}) xảy ra trước "${evB.label}" (${evB.chapter}) nhưng lại nằm ở chương muộn hơn.`
+                  `⚠️ Mâu thuẫn thứ tự: "${evA.label}" (${evA.chapter}, thứ tự #${evA.relativeOrder}) vs "${evB.label}" (${evB.chapter}, thứ tự #${evB.relativeOrder}) — thứ tự chương và relativeOrder ngược nhau.`
                 );
               }
             }
           }
 
-          // 3. Mâu thuẫn absoluteDate so với relativeOrder
+          // 3. Mâu thuẫn absoluteDate so với relativeOrder (hai chiều, bỏ qua order 0)
           const absA = parseAbsoluteDate(evA.absoluteDate);
           const absB = parseAbsoluteDate(evB.absoluteDate);
-          if (absA && absB) {
-            if (absA.getTime() > absB.getTime() && evA.relativeOrder < evB.relativeOrder) {
+          if (absA && absB && hasOrder(evA) && hasOrder(evB)) {
+            const dateDiff = absA.getTime() - absB.getTime();
+            const orderDiff = evA.relativeOrder - evB.relativeOrder;
+            if (dateDiff !== 0 && orderDiff !== 0 && Math.sign(dateDiff) !== Math.sign(orderDiff)) {
               conflicts.push(
-                `⚠️ Mâu thuẫn ngày: "${evA.label}" (${evA.absoluteDate}) muộn hơn "${evB.label}" (${evB.absoluteDate}) nhưng relativeOrder lại sớm hơn.`
+                `⚠️ Mâu thuẫn ngày: "${evA.label}" (${evA.absoluteDate}) vs "${evB.label}" (${evB.absoluteDate}) — thứ tự ngày và relativeOrder ngược nhau.`
               );
             }
           }
 
-          // Ghi nhận tuyến song song
-          if (!sameThread && (evA.relativeOrder === evB.relativeOrder || (absA && absB && absA.getTime() === absB.getTime()))) {
+          // Ghi nhận tuyến song song: chỉ khi cả hai đã đặt order (≠ 0)
+          // hoặc trùng absoluteDate thật sự.
+          if (!sameThread && ((hasOrder(evA) && hasOrder(evB) && evA.relativeOrder === evB.relativeOrder) || (absA && absB && absA.getTime() === absB.getTime()))) {
             parallelNotes.push(
               `⚡ Tuyến song song: [${evA.thread || 'Chính'}: "${evA.label}"] ⇆ [${evB.thread || 'Chính'}: "${evB.label}"]`
             );

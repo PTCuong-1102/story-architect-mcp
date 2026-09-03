@@ -19,7 +19,7 @@ export function registerTrackEmotionTool(server: McpServer): void {
       title: 'Quick Emotion Tracker',
       description: 'Phân tích nhanh cảm xúc và giọng văn của một đoạn text. Không cần context dự án — chỉ cần đưa vào đoạn văn cần kiểm tra.',
       inputSchema: z.object({
-        text: z.string().describe('Đoạn văn bản cần phân tích cảm xúc'),
+        text: z.string().min(1).max(20000).describe('Đoạn văn bản cần phân tích cảm xúc'),
       }),
     },
     async (params) => {

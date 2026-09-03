@@ -3,40 +3,73 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../../server/StoryProject.js';
-import { walkDir, readTextFile, exists } from '../../utils/fileUtils.js';
+import { walkDir, readTextFile, exists, isBlockedScanPath } from '../../utils/fileUtils.js';
 import { countWords } from '../../utils/wordCount.js';
 import type { RefactorAction } from '../../server/types.js';
 import { createSnapshot } from './snapshot.js';
 import { errResult } from '../../utils/mcpResults.js';
 
+/**
+ * Đoán số arc từ tên file hoặc đầu nội dung ("arc 2", "quyển 3", "hồi 1"...).
+ * Trả về tên thư mục arc (mặc định arc_01).
+ */
+function detectArcDir(basename: string, contentHead: string): string {
+  const m = (basename + '\n' + contentHead).match(
+    /(?:arc|quyển|quyen|hồi|hoi|phần|phan|tập|tap|part)[\s_\-]*0*(\d+)/i
+  );
+  const n = m ? parseInt(m[1], 10) : 1;
+  return `arc_${String(Math.max(1, n)).padStart(2, '0')}`;
+}
+
 function determineDestination(
   filePath: string,
   content: string,
-  strategy: 'by_chapter' | 'by_arc' | 'chronological'
+  strategy: 'by_chapter' | 'by_arc' | 'chronological',
+  seq = 0
 ): RefactorAction {
   const basename = path.basename(filePath);
   const lowerBasename = basename.toLowerCase();
   const words = countWords(content);
 
   let category = 'unknown';
-  if (/^ch[_\-]?\d+/i.test(lowerBasename) || /chapter/i.test(lowerBasename) || words > 1000) {
+  if (/^ch[_\-]?\d+/i.test(lowerBasename) || /chapter|chương|chuong/i.test(lowerBasename) || words > 1000) {
     category = 'manuscript';
-  } else if (/outline|synopsis|summary/i.test(lowerBasename)) {
+  } else if (/outline|synopsis|summary|dàn.?ý|dany|tóm.?tắt|tomtat/i.test(lowerBasename)) {
     category = 'outline';
-  } else if (/character|profile|world|lore|magic|setting/i.test(lowerBasename)) {
+  } else if (/character|profile|world|lore|magic|setting|nhân.?vật|nhanvat|thế.?giới|thegioi/i.test(lowerBasename)) {
     category = 'lore';
-  } else if (/note|idea|brainstorm|todo/i.test(lowerBasename)) {
+  } else if (/note|idea|brainstorm|todo|nháp|nhap|ghi.?chú|ghichu/i.test(lowerBasename)) {
     category = 'notes';
   }
 
   switch (category) {
-    case 'manuscript':
+    case 'manuscript': {
+      if (strategy === 'by_arc') {
+        const arcDir = detectArcDir(basename, content.slice(0, 2000));
+        return {
+          type: 'move',
+          source: filePath,
+          destination: path.join('manuscript', arcDir, basename),
+          reason: `File bản thảo → manuscript/${arcDir}/ (nhận diện arc từ tên/nội dung)`,
+        };
+      }
+      if (strategy === 'chronological') {
+        // Đánh số theo thứ tự mtime (seq do caller sắp xếp trước)
+        const numbered = `ch_${String(seq + 1).padStart(3, '0')}_${basename}`;
+        return {
+          type: 'move',
+          source: filePath,
+          destination: path.join('manuscript', 'arc_01', numbered),
+          reason: `File bản thảo → manuscript/arc_01/ (đánh số theo thời gian sửa)`,
+        };
+      }
       return {
         type: 'move',
         source: filePath,
         destination: path.join('manuscript', 'arc_01', basename),
         reason: 'File bản thảo → manuscript/arc_01/',
       };
+    }
     case 'outline':
       return {
         type: 'move',
@@ -84,7 +117,7 @@ export function registerAutoRefactorTool(server: McpServer, getProject: () => St
       title: 'Auto Refactor Novel Structure',
       description: 'Phân loại và chuẩn hóa cấu trúc thư mục dự án tiểu thuyết theo layout chuẩn. Hỗ trợ dry-run mode (confirm=false) để preview trước khi thực hiện.',
       inputSchema: z.object({
-        projectPath: z.string().describe('Đường dẫn dự án'),
+        projectPath: z.string().min(1).describe('Đường dẫn dự án'),
         strategy: z.enum(['by_chapter', 'by_arc', 'chronological']).default('by_chapter')
           .describe('Chiến lược sắp xếp'),
         confirm: z.boolean().default(false)
@@ -93,6 +126,10 @@ export function registerAutoRefactorTool(server: McpServer, getProject: () => St
     },
     async (params) => {
       const projectPath = params.projectPath;
+
+      if (isBlockedScanPath(path.resolve(projectPath))) {
+        return errResult(`🚫 Từ chối tái cấu trúc thư mục hệ thống: ${projectPath}\n\n💡 Chỉ tái cấu trúc thư mục dự án tiểu thuyết do bạn chỉ định.`);
+      }
 
       if (!await exists(projectPath)) {
         return errResult(`❌ Không tìm thấy: ${projectPath}`);
@@ -116,12 +153,28 @@ export function registerAutoRefactorTool(server: McpServer, getProject: () => St
         };
       }
 
+      // chronological: sắp theo mtime để đánh số thứ tự đúng
+      let orderedFiles = unstruturedFiles;
+      if (params.strategy === 'chronological') {
+        const withTime = await Promise.all(unstruturedFiles.map(async (f) => {
+          try {
+            const st = await fs.stat(f);
+            return { f, mtime: st.mtimeMs };
+          } catch {
+            return { f, mtime: 0 };
+          }
+        }));
+        orderedFiles = withTime.sort((a, b) => a.mtime - b.mtime).map(x => x.f);
+      }
+
       const actions: RefactorAction[] = [];
-      for (const file of unstruturedFiles) {
+      let seq = 0;
+      for (const file of orderedFiles) {
         const content = await readTextFile(file) || '';
         const relPath = path.relative(projectPath, file);
-        const action = determineDestination(relPath, content, params.strategy);
+        const action = determineDestination(relPath, content, params.strategy, seq);
         actions.push(action);
+        if (action.type === 'move') seq++;
       }
 
       if (!params.confirm) {
@@ -187,19 +240,36 @@ ${preview}
         if (action.type === 'skip') continue;
 
         const srcFull = path.join(projectPath, action.source);
-        const destFull = path.join(projectPath, action.destination);
+        let destFull = path.join(projectPath, action.destination);
 
         try {
           await fs.mkdir(path.dirname(destFull), { recursive: true });
 
+          // Tránh ghi đè khi trùng tên (kể cả khác hoa/thường trên FS
+          // case-insensitive — exists() đã bắt đúng vì FS tự resolve).
           if (await exists(destFull)) {
             const ext = path.extname(destFull);
             const base = path.basename(destFull, ext);
             const dir = path.dirname(destFull);
-            const newDest = path.join(dir, `${base}_${Date.now()}${ext}`);
-            await fs.rename(srcFull, newDest);
-          } else {
+            let n = 2;
+            let candidate = path.join(dir, `${base}_${n}${ext}`);
+            while (await exists(candidate)) {
+              n++;
+              candidate = path.join(dir, `${base}_${n}${ext}`);
+            }
+            destFull = candidate;
+          }
+
+          // rename gãy với EXDEV khi khác mount/device → fallback copy+unlink
+          try {
             await fs.rename(srcFull, destFull);
+          } catch (err) {
+            if ((err as NodeJS.ErrnoException)?.code === 'EXDEV') {
+              await fs.copyFile(srcFull, destFull);
+              await fs.unlink(srcFull);
+            } else {
+              throw err;
+            }
           }
           movedCount++;
         } catch (err) {

@@ -14,43 +14,50 @@ function analyzeChapterPacing(content: string): {
   tensionScore: number;
   beats: string[];
 } {
-  const lines = content.split('\n').filter(l => l.trim().length > 0 && !l.startsWith('#'));
+  const lines = content.split('\n').filter(l => {
+    const t = l.trim();
+    // Bỏ dòng trống, heading và hr (---) — hr bắt đầu bằng - nhưng không phải thoại
+    return t.length > 0 && !t.startsWith('#') && !/^(-{3,}|\*{3,}|_{3,})$/.test(t);
+  });
   const totalLines = lines.length || 1;
 
   let dialogueLines = 0;
   let actionLines = 0;
   let descriptionLines = 0;
 
-  // Tension keywords (tiếng Việt & Anh)
+  // Tension keywords (tiếng Việt & Anh). Từ đơn match theo token đã gọt
+  // dấu câu (để "máu," vẫn khớp); cụm nhiều từ match theo ranh giới từ.
   const tensionKeywords = [
     'chém', 'đánh', 'giết', 'chết', 'máu', 'bùng nổ', 'gào', 'hét', 'kiếm', 'đao',
     'bất ngờ', 'sợ', 'hãi', 'nguy hiểm', 'vực', 'vỡ', 'nổ', 'fight', 'kill', 'blood',
     'sword', 'fear', 'danger', 'shout', 'run', 'chạy', 'đuổi', 'trốn'
   ];
+  const singleKeywords = new Set(tensionKeywords.filter(k => !k.includes(' ')));
+  const phraseKeywords = tensionKeywords.filter(k => k.includes(' '));
+  const stripEdge = (w: string): string =>
+    w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
 
   let tensionHits = 0;
   const totalWords = countWords(content) || 1;
 
   for (const line of lines) {
-    const isDialogue = /[""「」『』]|^[-–—]\s/.test(line.trim());
+    // Thoại: chứa quote CJK/" hoặc mở đầu bằng gạch ngang (kể cả "—Hắn nói")
+    const isDialogue = /[""「」『』]|^[-–—]/.test(line.trim());
+    const tokens = line.toLowerCase().split(/\s+/).map(stripEdge).filter(t => t.length > 0);
+    const padded = ` ${tokens.join(' ')} `;
+    const matchedSingles = new Set(tokens.filter(t => singleKeywords.has(t)));
+    const matchedPhrases = phraseKeywords.filter(p => padded.includes(` ${p} `));
+
     if (isDialogue) {
       dialogueLines++;
+    } else if (matchedSingles.size > 0 || matchedPhrases.length > 0) {
+      actionLines++;
     } else {
-      // Kiêm tra có động từ mạnh/hành động không
-      const words = line.toLowerCase().split(/\s+/);
-      const hasActionWord = words.some(w => tensionKeywords.includes(w));
-      if (hasActionWord) {
-        actionLines++;
-      } else {
-        descriptionLines++;
-      }
+      descriptionLines++;
     }
 
-    // Đếm tension keywords
-    const lowerLine = line.toLowerCase();
-    for (const kw of tensionKeywords) {
-      if (lowerLine.includes(kw)) tensionHits++;
-    }
+    // Mỗi keyword khác nhau chỉ tính 1 hit/dòng — tránh "nổ" đếm đè "bùng nổ"
+    tensionHits += matchedSingles.size + matchedPhrases.length;
   }
 
   const dialoguePercent = Math.round((dialogueLines / totalLines) * 100);
@@ -90,7 +97,7 @@ export function registerAnalyzePacingTool(server: McpServer, getProject: () => S
       title: 'Analyze Pacing & Tension Curve',
       description: 'Đo lường tỷ lệ Action / Dialogue / Description, đường cong căng thẳng (Tension curve) và cấu trúc nhịp cảnh (Scene beats).',
       inputSchema: z.object({
-        arc: z.string().describe('Arc ID (ví dụ: arc_01)'),
+        arc: z.string().min(1).max(64).describe('Arc ID (ví dụ: arc_01)'),
         chapter: z.string().optional().describe('Chương cụ thể (bỏ qua để phân tích toàn bộ Arc)'),
       }),
     },

@@ -10,7 +10,7 @@ export function registerInitTool(server: McpServer, getProject: () => StoryProje
       title: 'Initialize Story Project',
       description: 'Khởi tạo dự án tiểu thuyết mới: tạo cấu trúc thư mục chuẩn (.story/, bible/, manuscript/, outline/...) và metadata ban đầu.',
       inputSchema: z.object({
-        name: z.string().describe('Tên dự án tiểu thuyết'),
+        name: z.string().min(1).max(200).describe('Tên dự án tiểu thuyết'),
         author: z.string().optional().describe('Tên tác giả'),
         genre: z.array(z.string()).optional().describe('Thể loại: Fantasy, Romance, Sci-Fi...'),
         pov: z.enum(['first', 'third-limited', 'third-omniscient', 'second']).optional().describe('Ngôi kể'),

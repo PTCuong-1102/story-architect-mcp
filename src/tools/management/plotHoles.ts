@@ -14,8 +14,8 @@ export function registerPlotHoleTools(server: McpServer, getProject: () => Story
       title: 'Log Plot Hole',
       description: 'Ghi nhận một điểm mâu thuẫn hoặc lỗ hổng cốt truyện mới vào hệ thống theo dõi.',
       inputSchema: z.object({
-        title: z.string().describe('Tên ngắn gọn cho plot hole'),
-        description: z.string().describe('Mô tả chi tiết mâu thuẫn'),
+        title: z.string().min(1).max(300).describe('Tên ngắn gọn cho plot hole'),
+        description: z.string().min(1).describe('Mô tả chi tiết mâu thuẫn'),
         severity: z.enum(['low', 'medium', 'high', 'critical']).default('medium')
           .describe('Mức độ nghiêm trọng'),
         chapters: z.array(z.string()).optional()

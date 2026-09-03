@@ -19,7 +19,7 @@ export function registerAnalyzeVoiceTool(server: McpServer, getProject: () => St
       title: 'Analyze Writing Voice & Drift',
       description: 'Phân tích giọng văn (độ dài câu, vốn từ, POV, Tense, cảm xúc chủ đạo) và kiểm tra hiện tượng trôi văn phong (Voice drift) so với style_guide.json.',
       inputSchema: z.object({
-        arc: z.string().describe('Arc ID cần phân tích'),
+        arc: z.string().min(1).max(64).describe('Arc ID cần phân tích'),
         chapter: z.string().optional().describe('Chương cụ thể cần kiểm tra'),
       }),
     },

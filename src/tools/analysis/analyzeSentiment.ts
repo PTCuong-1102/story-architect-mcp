@@ -21,9 +21,9 @@ export function registerAnalyzeSentimentTool(server: McpServer, getProject: () =
       title: 'Analyze Sentiment & Tone',
       description: 'Phân tích cảm xúc (sentiment), giọng văn (tone), và emotional arc của chương/arc. Phát hiện tone drift giữa các chương.',
       inputSchema: z.object({
-        arc: z.string().describe('Arc ID cần phân tích (ví dụ: arc_01)'),
+        arc: z.string().min(1).max(64).describe('Arc ID cần phân tích (ví dụ: arc_01)'),
         chapter: z.string().optional().describe('Chương cụ thể (bỏ qua để phân tích toàn bộ Arc)'),
-        windowSize: z.number().default(200).describe('Số từ mỗi sliding window cho emotional arc (default 200)'),
+        windowSize: z.number().int().min(10).default(200).describe('Số từ mỗi sliding window cho emotional arc (default 200)'),
         compareToStyleGuide: z.boolean().default(true).describe('So sánh với style_guide.json nếu có'),
       }),
     },

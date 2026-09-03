@@ -9,8 +9,14 @@ import { createZip } from '../utils/zip.js';
 import { findMarkdownFiles, readTextFile } from '../utils/fileUtils.js';
 import { errResult, requireProject, isToolError } from '../utils/mcpResults.js';
 
+/**
+ * Escape text cho XML (EPUB/DOCX). Đồng thời loại ký tự điều khiển
+ * (U+0000–U+0008, U+000B–U+000C, U+000E–U+001F, U+FFFE/U+FFFF) vì chúng
+ * làm XML ill-formed → EPUBCheck fatal / Word báo repair.
+ */
 const escapeXml = (s: string): string =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
 interface ChapterContent { arc: string; chapter: string; content: string; }
@@ -93,8 +99,10 @@ function buildEpubEntries(title: string, author: string, language: string, chapt
 
   const titlePage = `<section epub:type="titlepage"><h1>${escapeXml(title)}</h1>${author ? `<p>${escapeXml(author)}</p>` : ''}</section>`;
 
+  // href fragment phải URL-encode (tên chương có dấu cách/ký tự đặc biệt
+  // sẽ gãy link mục lục); id giữ nguyên để tương thích ngược.
   const navItems = chapters.map(c =>
-    `<li><a href="content.xhtml#${escapeXml(c.chapter)}">${escapeXml(c.chapter)}</a></li>`
+    `<li><a href="content.xhtml#${encodeURIComponent(c.chapter)}">${escapeXml(c.chapter)}</a></li>`
   ).join('\n') + (outlineMd ? '\n<li><a href="content.xhtml#outline">Dàn ý (Outline)</a></li>' : '');
 
   const outlineSection = outlineMd
@@ -147,6 +155,13 @@ function buildEpubEntries(title: string, author: string, language: string, chapt
     <nav epub:type="toc" id="toc">
       <h1>Mục lục</h1>
       <ol>${navItems}</ol>
+    </nav>
+    <nav epub:type="landmarks" id="landmarks" hidden="">
+      <h2>Landmarks</h2>
+      <ol>
+        <li><a epub:type="toc" href="#toc">Mục lục</a></li>
+        <li><a epub:type="bodymatter" href="content.xhtml">Nội dung chính</a></li>
+      </ol>
     </nav>
   </body>
 </html>
@@ -255,23 +270,35 @@ ${paragraphs.join('\n')}
       name: 'word/styles.xml',
       data: Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:docDefaults>
+    <w:rPrDefault><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault>
+    <w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault>
+  </w:docDefaults>
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+    <w:qFormat/>
+  </w:style>
   <w:style w:type="paragraph" w:styleId="Title">
     <w:name w:val="Title"/>
+    <w:basedOn w:val="Normal"/>
     <w:pPr><w:jc w:val="center"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="48"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading1">
     <w:name w:val="heading 1"/>
+    <w:basedOn w:val="Normal"/>
     <w:pPr><w:keepNext/><w:spacing w:before="360" w:after="120"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="36"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading2">
     <w:name w:val="heading 2"/>
+    <w:basedOn w:val="Normal"/>
     <w:pPr><w:keepNext/><w:spacing w:before="240" w:after="80"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="28"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading3">
     <w:name w:val="heading 3"/>
+    <w:basedOn w:val="Normal"/>
     <w:pPr><w:keepNext/><w:spacing w:before="200" w:after="60"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="24"/></w:rPr>
   </w:style>
@@ -357,12 +384,15 @@ export function registerExportTool(server: McpServer, getProject: () => StoryPro
           break;
         }
         case 'epub': {
-          const entries = buildEpubEntries(config.name, config.author, language, chapters, outlineMd);
+          // Nén mọi entry trừ mimetype (EPUB bắt buộc mimetype STORED đầu tiên)
+          const entries = buildEpubEntries(config.name, config.author, language, chapters, outlineMd)
+            .map(e => (e.name === 'mimetype' ? e : { ...e, deflate: true }));
           await fs.writeFile(outputPath, createZip(entries));
           break;
         }
         case 'docx': {
-          const entries = buildDocxEntries(config.name, chapters, outlineMd);
+          const entries = buildDocxEntries(config.name, chapters, outlineMd)
+            .map(e => ({ ...e, deflate: true }));
           await fs.writeFile(outputPath, createZip(entries));
           break;
         }
