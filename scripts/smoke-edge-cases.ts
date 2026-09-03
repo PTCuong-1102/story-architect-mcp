@@ -182,8 +182,15 @@ async function main() {
     report('res: char không tồn tại → message sạch', txt.includes('Không tìm thấy') ? 'PASS' : 'WARN', txt.slice(0, 100));
   } catch (e: any) { report('res: char không tồn tại', 'FAIL', e.message.slice(0, 150)); }
   try {
-    await client.request('resources/read', { uri: 'story://unknown' });
-    report('res: uri lạ', 'FAIL', 'không error?');
+    // MiniClient.request resolve cả JSON-RPC error (không throw),
+    // nên phải kiểm tra msg.error một cách tường minh thay vì trông chờ exception.
+    const unkRes = await client.request('resources/read', { uri: 'story://unknown' });
+    if (unkRes.error) {
+      const clean = !/stack/i.test(unkRes.error.message || '');
+      report('res: uri lạ → lỗi chuẩn', clean ? 'PASS' : 'FAIL', `[${unkRes.error.code}] ${(unkRes.error.message || '').slice(0, 120)}`);
+    } else {
+      report('res: uri lạ', 'FAIL', 'không error?');
+    }
   } catch (e: any) {
     const clean = !/stack/i.test(e.message);
     report('res: uri lạ → lỗi chuẩn', clean ? 'PASS' : 'FAIL', e.message.slice(0, 120));

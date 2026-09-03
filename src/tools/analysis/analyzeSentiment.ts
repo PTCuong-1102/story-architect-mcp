@@ -12,7 +12,7 @@ import {
   type ToneDriftAlert,
 } from '../../utils/sentimentLexicon.js';
 import type { SentimentCache, ChapterSentiment } from '../../server/types.js';
-import { errResult } from '../../utils/mcpResults.js';
+import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 
 export function registerAnalyzeSentimentTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -28,7 +28,8 @@ export function registerAnalyzeSentimentTool(server: McpServer, getProject: () =
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');

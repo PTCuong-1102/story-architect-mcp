@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { StoryProject } from '../server/StoryProject.js';
+import { requireProject, isToolError } from '../utils/mcpResults.js';
 
 export function registerInitTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -19,7 +20,8 @@ export function registerInitTool(server: McpServer, getProject: () => StoryProje
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (await project.isInitialized()) {
         return {

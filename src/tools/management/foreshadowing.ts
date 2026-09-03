@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { generateId } from '../../utils/fileUtils.js';
 import type { ForeshadowingItem } from '../../server/types.js';
-import { errResult } from '../../utils/mcpResults.js';
+import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 
 export function registerForeshadowingTools(server: McpServer, getProject: () => StoryProject): void {
 
@@ -22,7 +22,8 @@ export function registerForeshadowingTools(server: McpServer, getProject: () => 
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo.');
@@ -75,7 +76,8 @@ ${newItem.setupLine ? `💬 Trích dẫn: "${newItem.setupLine}"` : ''}
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo.');
@@ -125,7 +127,8 @@ ${newItem.setupLine ? `💬 Trích dẫn: "${newItem.setupLine}"` : ''}
       inputSchema: z.object({}),
     },
     async () => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo.');

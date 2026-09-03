@@ -1,5 +1,6 @@
 /**
- * Smoke test toàn bộ MCP surface (21 tools + 6 resources + 3 templates + 5 prompts)
+ * Smoke test MCP surface (21 tools trong subset đăng ký ở script này —
+ * server thật có 28 tools, xem smoke-stdio.ts — + 8 resources + 4 templates + 5 prompts)
  * qua InMemoryTransport THẬT của SDK — tái hiện đúng đường đi của client thực.
  */
 import * as path from 'node:path';
@@ -277,7 +278,7 @@ async function main() {
   try {
     const rl = await client.request('resources/list', {});
     const uris: string[] = (rl.result?.resources || []).map((r: any) => r.uri);
-    report('resources/list', uris.length === 6 ? 'PASS' : 'WARN', `${uris.length} static`);
+    report('resources/list', uris.length === 8 ? 'PASS' : 'WARN', `${uris.length} static`);
     for (const uri of uris) {
       const rr = await client.request('resources/read', { uri });
       rr.error ? report(`read ${uri}`, 'FAIL', JSON.stringify(rr.error).slice(0, 250))
@@ -285,10 +286,11 @@ async function main() {
     }
     const tpl = await client.request('resources/templates/list', {});
     const tplUris: string[] = (tpl.result?.resourceTemplates || []).map((r: any) => r.uriTemplate);
-    report('resources/templates/list', tplUris.length === 3 ? 'PASS' : 'WARN', `${tplUris.length} templates`);
+    report('resources/templates/list', tplUris.length === 4 ? 'PASS' : 'WARN', `${tplUris.length} templates`);
     for (const [uri, label] of [
       ['story://bible/characters/linh_hon', 'char'],
       ['story://bible/world/thanh_van_son', 'world'],
+      ['story://character-states/Linh Hồn', 'char-state'],
       ['story://manuscript/arc_01/ch_001', 'chapter'],
     ] as const) {
       const rr = await client.request('resources/read', { uri });

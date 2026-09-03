@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { createSnapshot } from '../rescue/snapshot.js';
 import { countWords } from '../../utils/wordCount.js';
-import { errResult } from '../../utils/mcpResults.js';
+import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 
 export function registerManuscriptAuthoringTools(
   server: McpServer,
@@ -25,7 +25,8 @@ export function registerManuscriptAuthoringTools(
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
@@ -93,7 +94,8 @@ ${snapshotNote}
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
@@ -137,7 +139,8 @@ ${snapshotNote}
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }

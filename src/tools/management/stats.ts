@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
-import { errResult } from '../../utils/mcpResults.js';
+import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 
 export function registerStatsTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -12,7 +12,8 @@ export function registerStatsTool(server: McpServer, getProject: () => StoryProj
       inputSchema: z.object({}),
     },
     async () => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');

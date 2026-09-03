@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { StoryProject } from '../server/StoryProject.js';
 import { readTextFile, isSafePathSegment } from '../utils/fileUtils.js';
 import { TONE_LABELS, polarityLabel, type ToneCategory } from '../utils/sentimentLexicon.js';
-import { errResult } from '../utils/mcpResults.js';
+import { errResult, requireProject, isToolError } from '../utils/mcpResults.js';
 
 export function registerGenerateWritingPromptTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -20,7 +20,8 @@ export function registerGenerateWritingPromptTool(server: McpServer, getProject:
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');

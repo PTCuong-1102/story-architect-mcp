@@ -7,3 +7,4 @@ dist/
 !src/**/*
 .story/
 .cbm/
+.codebase-memory/

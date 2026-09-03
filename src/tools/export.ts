@@ -6,7 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { StoryProject } from '../server/StoryProject.js';
 import { markdownToHtml, htmlDocument } from '../utils/markdownToHtml.js';
 import { createZip } from '../utils/zip.js';
-import { errResult } from '../utils/mcpResults.js';
+import { findMarkdownFiles, readTextFile } from '../utils/fileUtils.js';
+import { errResult, requireProject, isToolError } from '../utils/mcpResults.js';
 
 const escapeXml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -27,7 +28,25 @@ async function collectChapters(project: StoryProject): Promise<ChapterContent[]>
   return chapters;
 }
 
-function buildMarkdown(projectName: string, author: string, genre: string, wordCount: string, chapters: ChapterContent[]): string {
+/**
+ * Thu thập toàn bộ dàn ý trong outline/ thành một khối Markdown.
+ * Chỉ gọi khi user bật includeOutline (tránh quét đĩa không cần thiết).
+ */
+async function collectOutline(project: StoryProject): Promise<string> {
+  const files = await findMarkdownFiles(project.outlineDir);
+  if (files.length === 0) return '';
+  files.sort();
+  const parts: string[] = [];
+  for (const f of files) {
+    const content = await readTextFile(f);
+    if (!content || !content.trim()) continue;
+    const rel = path.relative(project.outlineDir, f);
+    parts.push(`\n### ${rel}\n\n${content.trim()}`);
+  }
+  return parts.join('\n');
+}
+
+function buildMarkdown(projectName: string, author: string, genre: string, wordCount: string, chapters: ChapterContent[], outlineMd = ''): string {
   const parts: string[] = [];
   parts.push(`# ${projectName}\n`);
   if (author) parts.push(`**Tác giả**: ${author}\n`);
@@ -58,22 +77,33 @@ function buildMarkdown(projectName: string, author: string, genre: string, wordC
       parts.push('\n');
     }
   }
+
+  if (outlineMd) {
+    parts.push('\n---\n');
+    parts.push('\n# DÀN Ý (OUTLINE)\n');
+    parts.push(outlineMd);
+    parts.push('\n');
+  }
   return parts.join('\n');
 }
 
 /** Tạo các entry của EPUB 3.0 (mimetype bắt buộc là entry đầu, lưu STORED). */
-function buildEpubEntries(title: string, author: string, language: string, chapters: ChapterContent[]): { name: string; data: Buffer; deflate?: boolean }[] {
+function buildEpubEntries(title: string, author: string, language: string, chapters: ChapterContent[], outlineMd = ''): { name: string; data: Buffer; deflate?: boolean }[] {
   const bookId = randomUUID();
 
   const titlePage = `<section epub:type="titlepage"><h1>${escapeXml(title)}</h1>${author ? `<p>${escapeXml(author)}</p>` : ''}</section>`;
 
   const navItems = chapters.map(c =>
     `<li><a href="content.xhtml#${escapeXml(c.chapter)}">${escapeXml(c.chapter)}</a></li>`
-  ).join('\n');
+  ).join('\n') + (outlineMd ? '\n<li><a href="content.xhtml#outline">Dàn ý (Outline)</a></li>' : '');
+
+  const outlineSection = outlineMd
+    ? `\n\n<section id="outline" epub:type="appendix"><h2>Dàn ý (Outline)</h2>\n${markdownToHtml(outlineMd)}</section>`
+    : '';
 
   const bodySections = chapters.map(c =>
     `<section id="${escapeXml(c.chapter)}" epub:type="chapter"><h2>${escapeXml(c.chapter)}</h2>\n${markdownToHtml(c.content)}</section>`
-  ).join('\n\n');
+  ).join('\n\n') + outlineSection;
 
   return [
     { name: 'mimetype', data: Buffer.from('application/epub+zip'), deflate: false },
@@ -149,17 +179,14 @@ ${bodySections}
 }
 
 /** Tạo các entry của DOCX (WordprocessingML tối giản). */
-function buildDocxEntries(title: string, chapters: ChapterContent[]): { name: string; data: Buffer; deflate?: boolean }[] {
+function buildDocxEntries(title: string, chapters: ChapterContent[], outlineMd = ''): { name: string; data: Buffer; deflate?: boolean }[] {
   const paragraphs: string[] = [];
   const pushParagraph = (text: string, style?: string) => {
     const pPr = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : '';
     paragraphs.push(`<w:p>${pPr}<w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`);
   };
-
-  pushParagraph(title, 'Title');
-  for (const c of chapters) {
-    pushParagraph(c.chapter, 'Heading1');
-    for (const line of c.content.split('\n')) {
+  const pushMarkdownBlock = (md: string) => {
+    for (const line of md.split('\n')) {
       const t = line.trim();
       if (!t) continue;
       const h1 = t.match(/^#\s+(.*)$/);
@@ -170,6 +197,17 @@ function buildDocxEntries(title: string, chapters: ChapterContent[]): { name: st
       else if (h3) pushParagraph(h3[1], 'Heading3');
       else pushParagraph(t);
     }
+  };
+
+  pushParagraph(title, 'Title');
+  for (const c of chapters) {
+    pushParagraph(c.chapter, 'Heading1');
+    pushMarkdownBlock(c.content);
+  }
+
+  if (outlineMd) {
+    pushParagraph('Dàn ý (Outline)', 'Heading1');
+    pushMarkdownBlock(outlineMd);
   }
 
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -268,7 +306,8 @@ export function registerExportTool(server: McpServer, getProject: () => StoryPro
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
@@ -284,49 +323,52 @@ export function registerExportTool(server: McpServer, getProject: () => StoryPro
       await fs.mkdir(outputDir, { recursive: true });
 
       const format = params.format;
+
+      // PDF trả về sớm: vừa giữ thông điệp hướng dẫn, vừa tránh bug
+      // outputPath thành "<name>undefined" (pdf không có trong extMap).
+      if (format === 'pdf') {
+        return errResult(`❌ Định dạng "pdf" hiện chưa được hỗ trợ trực tiếp (PDF yêu cầu nhúng font, chưa hỗ trợ tiếng Việt chuẩn).
+
+💡 Cách xuất PDF: xuất định dạng \`html\` rồi mở bằng trình duyệt và "In → Save as PDF".
+
+✅ Các định dạng đang hỗ trợ: markdown_single, html, epub, docx.`);
+      }
+
       const extMap: Record<string, string> = {
         markdown_single: '.md',
         html: '.html',
         epub: '.epub',
         docx: '.docx',
       };
-      const outputPath = params.outputPath || path.join(outputDir, baseName + extMap[format]);
+      const outputPath = params.outputPath || path.join(outputDir, baseName + (extMap[format] ?? '.md'));
       const language = config.language || 'vi';
 
-      let written = true;
+      const outlineMd = params.includeOutline ? await collectOutline(project) : '';
+
       switch (format) {
         case 'markdown_single': {
-          const md = buildMarkdown(config.name, config.author, config.genre.join(', '), status.totalWordCount.toLocaleString(), chapters);
+          const md = buildMarkdown(config.name, config.author, config.genre.join(', '), status.totalWordCount.toLocaleString(), chapters, outlineMd);
           await fs.writeFile(outputPath, md, 'utf-8');
           break;
         }
         case 'html': {
-          const md = buildMarkdown(config.name, config.author, config.genre.join(', '), status.totalWordCount.toLocaleString(), chapters);
+          const md = buildMarkdown(config.name, config.author, config.genre.join(', '), status.totalWordCount.toLocaleString(), chapters, outlineMd);
           await fs.writeFile(outputPath, htmlDocument(config.name, markdownToHtml(md)), 'utf-8');
           break;
         }
         case 'epub': {
-          const entries = buildEpubEntries(config.name, config.author, language, chapters);
+          const entries = buildEpubEntries(config.name, config.author, language, chapters, outlineMd);
           await fs.writeFile(outputPath, createZip(entries));
           break;
         }
         case 'docx': {
-          const entries = buildDocxEntries(config.name, chapters);
+          const entries = buildDocxEntries(config.name, chapters, outlineMd);
           await fs.writeFile(outputPath, createZip(entries));
           break;
         }
         default: {
-          written = false;
-          break;
+          return errResult(`❌ Định dạng "${params.format}" không xác định. Hỗ trợ: markdown_single, html, epub, docx.`);
         }
-      }
-
-      if (!written) {
-        return errResult(`❌ Định dạng "${params.format}" hiện chưa được hỗ trợ trực tiếp (PDF yêu cầu nhúng font, chưa hỗ trợ tiếng Việt chuẩn).
-            
-💡 Cách xuất PDF: xuất định dạng \`html\` rồi mở bằng trình duyệt và "In → Save as PDF".
-
-✅ Các định dạng đang hỗ trợ: markdown_single, html, epub, docx.`);
       }
 
       return {
@@ -339,7 +381,8 @@ export function registerExportTool(server: McpServer, getProject: () => StoryPro
 - Tổng số từ: ${status.totalWordCount.toLocaleString()}
 - Số arc: ${arcs.length}
 - Số chương: ${chapters.length}
-- Định dạng: ${format}`,
+- Định dạng: ${format}
+- Dàn ý kèm theo: ${outlineMd ? 'có ✅' : 'không (bật includeOutline=true để kèm outline/)'}`,
         }],
       };
     }

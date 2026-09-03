@@ -5,7 +5,7 @@ import * as fs from 'node:fs/promises';
 import { StoryProject } from '../../server/StoryProject.js';
 import { exists, copyDir, generateId, readJsonFile, writeJsonFile } from '../../utils/fileUtils.js';
 import type { SnapshotsIndex, Snapshot } from '../../server/types.js';
-import { errResult } from '../../utils/mcpResults.js';
+import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 
 /**
  * Tạo snapshot dùng chung cho dự án (được story_snapshot và các tool
@@ -95,7 +95,8 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
@@ -132,7 +133,8 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
       const snapshotsDir = project.getSnapshotsDir();
       const indexPath = path.join(snapshotsDir, 'index.json');
 

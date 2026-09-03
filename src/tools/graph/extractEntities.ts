@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../../server/StoryProject.js';
 import { readTextFile, exists } from '../../utils/fileUtils.js';
-import { errResult } from '../../utils/mcpResults.js';
+import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 
 /**
  * Trích xuất tên riêng dạng Title Case hoặc Capitalized words từ văn bản.
@@ -80,7 +80,8 @@ export function registerExtractEntitiesTool(server: McpServer, getProject: () =>
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');

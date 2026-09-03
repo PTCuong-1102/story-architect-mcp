@@ -141,6 +141,15 @@ export async function exists(p: string): Promise<boolean> {
 
 /**
  * Đệ quy liệt kê tất cả file trong thư mục.
+ *
+ * NOTE (by-design, không phải thiếu sót): implementation_plan.md từng đề xuất
+ * thêm dep `glob` + `diff`, nhưng hiện thực đã thay bằng:
+ * - `walkDir`/`findMarkdownFiles` thay `glob` — đủ cho nhu cầu quét .md/.txt,
+ *   không thêm dependency, tránh breaking-change upstream;
+ * - `copyDir` + full-copy snapshot (xem createSnapshot trong rescue/snapshot.ts)
+ *   thay `diff` — tiểu thuyết vài MB, full-copy đơn giản và robust hơn diff.
+ * Chỉ cân nhắc thêm dep khi repo manuscript vượt ~100MB hoặc cần lưu
+ * diff từng phần thay vì full-copy.
  */
 export async function walkDir(dir: string, extensions?: string[]): Promise<string[]> {
   const results: string[] = [];

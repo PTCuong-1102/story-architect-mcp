@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { generateId } from '../../utils/fileUtils.js';
 import type { PlotHole } from '../../server/types.js';
-import { errResult } from '../../utils/mcpResults.js';
+import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 
 export function registerPlotHoleTools(server: McpServer, getProject: () => StoryProject): void {
 
@@ -23,7 +23,8 @@ export function registerPlotHoleTools(server: McpServer, getProject: () => Story
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
@@ -76,7 +77,8 @@ export function registerPlotHoleTools(server: McpServer, getProject: () => Story
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo.');

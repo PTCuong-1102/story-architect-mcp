@@ -10,7 +10,7 @@ import {
   type SentimentResult,
   type ToneCategory,
 } from '../../utils/sentimentLexicon.js';
-import { errResult } from '../../utils/mcpResults.js';
+import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 
 export function registerAnalyzeVoiceTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -24,7 +24,8 @@ export function registerAnalyzeVoiceTool(server: McpServer, getProject: () => St
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
 
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');

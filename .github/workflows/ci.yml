@@ -30,3 +30,12 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # Smoke qua MCP transport thật (InMemory + stdio). Bắt lỗi mà unit
+      # test không thấy: registration thiếu, throw thô thay vì isError,
+      # stdout ô nhiễm, lệch số tools/resources so với README.
+      - name: Smoke (edge + all-tools + stdio)
+        run: |
+          npx tsx scripts/smoke-edge-cases.ts
+          npx tsx scripts/smoke-all-tools.ts
+          npx tsx scripts/smoke-stdio.ts

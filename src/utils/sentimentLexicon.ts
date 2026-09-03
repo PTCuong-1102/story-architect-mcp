@@ -5,10 +5,13 @@
  * trong tiểu thuyết tiếng Việt (và Anh). Hỗ trợ:
  *
  * 1. Custom Vietnamese + English Emotion Lexicon (~1800 mục từ)
- * 2. Negation / Intensifier rules
+ * 2. Negation / Intensifier rules (kèm teencode: ko/k/vl/vãi...)
  * 3. Sentence-level sentiment scoring
  * 4. Sliding window emotional arc computation
  * 5. Tone classification (8 categories)
+ * 6. Internet-slang normalization: chữ kéo dài (vuiii→vui),
+ *    biến thể cười/khóc (hahaha→haha), text không dấu (fallback
+ *    có stoplist chống false-positive), emoticon ASCII (:), :().
  *
  * Kiến trúc sẵn sàng mở rộng sang Local Embedding / Vector Search
  * thông qua interface SentimentAnalyzer.
@@ -614,6 +617,27 @@ const EMOTION_LEXICON: Map<string, EmotionEntry> = new Map([
   ['warrior', e(0.1, ['trust', 'anticipation'], 0.5)],
   ['hero', e(0.4, ['trust', 'joy', 'anticipation'], 0.6)],
   ['conquer', e(0.2, ['anticipation', 'joy'], 0.6)],
+
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // TEENCODE / KHẨU NGỮ MẠNG — chat, dialogue hiện đại
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  ['haha', e(0.6, ['joy'], 0.7)],
+  ['hehe', e(0.5, ['joy'], 0.6)],
+  ['hihi', e(0.5, ['joy'], 0.6)],
+  ['kaka', e(0.5, ['joy'], 0.6)],
+  ['huhu', e(-0.5, ['sadness'], 0.6)],
+  ['ngon', e(0.5, ['joy'], 0.5)],
+  ['xịn', e(0.6, ['joy'], 0.6)],
+  ['đỉnh', e(0.7, ['joy', 'surprise'], 0.7)],
+  ['dinh', e(0.7, ['joy', 'surprise'], 0.7)],
+  ['cay', e(-0.5, ['anger'], 0.6)],
+  ['toang', e(-0.6, ['fear', 'sadness'], 0.7)],
+  ['gắt', e(-0.4, ['anger'], 0.5)],
+  ['gat', e(-0.4, ['anger'], 0.5)],
+  ['dở', e(-0.4, ['sadness'], 0.5)],
+  // NOTE: không thêm 'do' (dở không dấu) vì trùng trợ động từ tiếng Anh "do".
+  ['tệ', e(-0.5, ['sadness'], 0.6)],
+  ['te', e(-0.5, ['sadness'], 0.6)],
 ]);
 
 // ============================================================
@@ -633,6 +657,15 @@ const NEGATORS: Map<string, number> = new Map([
   ['chẳng bao giờ', -1],
   ['chả', -1],
   ['nào có', -1],
+  // Teencode / không dấu (chat, comment, draft nhanh)
+  ['ko', -1],
+  ['k', -1],
+  ['khong', -1],
+  ['hok', -1],
+  ['hem', -1],
+  ['hong', -1],
+  ['đéo', -1],
+  ['deo', -1],
   // English
   ['not', -1],
   ["n't", -1],
@@ -664,6 +697,15 @@ const INTENSIFIERS: Map<string, number> = new Map([
   ['thật sự', 1.5],
   ['thực sự', 1.5],
   ['cực kì', 2.0],
+  // Teencode intensifiers
+  ['vãi', 1.8],
+  ['vl', 1.8],
+  ['vcl', 1.8],
+  ['vkl', 1.8],
+  ['vc', 1.8],
+  ['vler', 1.8],
+  ['siêu', 1.5],
+  ['sieu', 1.5],
   // English
   ['very', 1.5],
   ['extremely', 2.0],
@@ -680,6 +722,103 @@ const INTENSIFIERS: Map<string, number> = new Map([
   ['deeply', 1.5],
   ['terribly', 1.5],
 ]);
+
+// ============================================================
+// Vietnamese Internet-Slang Normalization
+// (teencode, kéo dài chữ, không dấu, emoticon)
+// ============================================================
+
+/** Bỏ dấu tiếng Việt: "hạnh phúc" → "hanh phuc". */
+function stripDiacritics(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
+}
+
+/**
+ * Từ chức năng tiếng Việt phổ biến mà dạng không dấu của chúng
+ * trùng từ tiếng Anh/Việt trung tính → LOẠI khỏi fallback không dấu
+ * để tránh false positive (vd: "cho"=for, "an"=ăn/article, "do"=động từ).
+ */
+const UNACCENTED_EXCLUDE = new Set([
+  'cho', 'an', 'den', 'di', 'da', 'la', 'ma', 'thi', 'con', 'em',
+  'anh', 'chi', 'cai', 'nay', 'kia', 'vay', 'the', 'cua', 'nguoi',
+  'mot', 'hai', 'khi', 'de', 've', 'ra', 'vao', 'len', 'xuong',
+  'tren', 'duoi', 'do', 'o', 'a', 'e', 'i', 'u', 'y', 'doan',
+]);
+
+let unaccentedLexicon: Map<string, EmotionEntry> | null = null;
+
+/** Index phụ: key không dấu → entry (build lazy một lần). */
+function getUnaccentedLexicon(): Map<string, EmotionEntry> {
+  if (!unaccentedLexicon) {
+    unaccentedLexicon = new Map();
+    for (const [key, entry] of EMOTION_LEXICON) {
+      const plain = stripDiacritics(key).toLowerCase();
+      if (plain === key) continue; // vốn đã không dấu → exact hit đủ
+      if (plain.length < 3 || UNACCENTED_EXCLUDE.has(plain)) continue;
+      if (!unaccentedLexicon.has(plain)) unaccentedLexicon.set(plain, entry);
+    }
+  }
+  return unaccentedLexicon;
+}
+
+/** Tra cứu lexicon: exact trước, fallback không dấu sau. */
+function lookupLexicon(token: string): EmotionEntry | undefined {
+  return EMOTION_LEXICON.get(token) ?? getUnaccentedLexicon().get(token);
+}
+
+/** Các biến thể cười/khóc gõ lặp → chuẩn hóa về dạng gốc. */
+const LAUGHTER_VARIANTS = new Set([
+  'hahaha', 'hahahaha', 'hahahahaha', 'hehehe', 'hehehehe',
+  'hihihi', 'hihihihi', 'kakaka', 'kakakaka', 'hahaah',
+]);
+const CRY_VARIANTS = new Set([
+  'huhuhu', 'huhuhuhu', 'huuhu', 'huhuuhu', 'huc', 'huc huc',
+]);
+
+/**
+ * Chuẩn hóa một token về dạng tra cứu được:
+ * 1. gộp chữ kéo dài ("vuiii" → "vui", "buồnnn" → "buồn")
+ * 2. gộp biến thể cười/khóc ("hahaha" → "haha", "huhuhu" → "huhu")
+ */
+function normalizeToken(token: string): string {
+  let t = token.replace(/(.)\1{2,}/g, '$1');
+  if (LAUGHTER_VARIANTS.has(t)) return 'haha';
+  if (t === 'hehe' || t === 'hihi' || t === 'kaka') return t;
+  if (CRY_VARIANTS.has(t)) return 'huhu';
+  return t;
+}
+
+/** Emoticon ASCII phổ biến trong dialogue/chat tiếng Việt. */
+const POSITIVE_EMOTICONS = [':)', ':-)', ':D', ':-D', '=)', '<3', '^^'];
+const NEGATIVE_EMOTICONS = [':(', ':-(', ":'(", ':((', 'T_T', 'T.T', ':/', ':-/'];
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const POS_EMO_RE = new RegExp(
+  POSITIVE_EMOTICONS.map(escapeRegExp).sort((a, b) => b.length - a.length).join('|'),
+  'g',
+);
+const NEG_EMO_RE = new RegExp(
+  NEGATIVE_EMOTICONS.map(escapeRegExp).sort((a, b) => b.length - a.length).join('|'),
+  'g',
+);
+
+/**
+ * Quét & tách emoticon khỏi text trước khi tokenize (vì bộ tách từ
+ * sẽ phá vỡ chúng thành dấu câu rời). Trả về text sạch + số lượng.
+ */
+function extractEmoticons(text: string): { cleaned: string; positive: number; negative: number } {
+  const positive = (text.match(POS_EMO_RE) ?? []).length;
+  const negative = (text.match(NEG_EMO_RE) ?? []).length;
+  const cleaned = text.replace(POS_EMO_RE, ' ').replace(NEG_EMO_RE, ' ');
+  return { cleaned, positive, negative };
+}
 
 // ============================================================
 // Text Processing Utilities
@@ -708,16 +847,30 @@ function tokenize(text: string): string[] {
   const lower = text.toLowerCase();
   const tokens: string[] = [];
 
-  // Tách cơ bản trên whitespace/punctuation
-  const rawTokens = lower.split(/[\s,;:()[\]{}"'""「」『』—–\-]+/).filter(t => t.length > 0);
+  // Tách cơ bản trên whitespace/punctuation.
+  // Bao gồm . ! ? … để từ cuối câu ("vui.", "buồn!") vẫn match được lexicon;
+  // emoticon đã được extractEmoticons() tách ra trước nên không lo mất.
+  const rawTokens = lower
+    .split(/[\s,;:()[\]{}"'""「」『』—–\-._!?…/\\|]+/)
+    .map(t => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')) // gọt dấu câu dính đầu/cuối
+    .filter(t => t.length > 0)
+    .map(normalizeToken); // gộp chữ kéo dài + biến thể cười/khóc
 
-  // Ghép multi-word tokens (2-word và 3-word)
+  // Ghép multi-word tokens (2-word và 3-word).
+  // Mỗi ứng viên check cả dạng gốc lẫn không dấu để text teen/chat
+  // ("hanh phuc", "khong he") vẫn ghép được compound.
+  const matchesKnown = (s: string): boolean =>
+    EMOTION_LEXICON.has(s) ||
+    NEGATORS.has(s) ||
+    INTENSIFIERS.has(s) ||
+    getUnaccentedLexicon().has(stripDiacritics(s));
+
   let i = 0;
   while (i < rawTokens.length) {
     // Thử 3-word compound
     if (i + 2 < rawTokens.length) {
       const tri = `${rawTokens[i]} ${rawTokens[i + 1]} ${rawTokens[i + 2]}`;
-      if (EMOTION_LEXICON.has(tri) || NEGATORS.has(tri) || INTENSIFIERS.has(tri)) {
+      if (matchesKnown(tri)) {
         tokens.push(tri);
         i += 3;
         continue;
@@ -726,7 +879,7 @@ function tokenize(text: string): string[] {
     // Thử 2-word compound
     if (i + 1 < rawTokens.length) {
       const bi = `${rawTokens[i]} ${rawTokens[i + 1]}`;
-      if (EMOTION_LEXICON.has(bi) || NEGATORS.has(bi) || INTENSIFIERS.has(bi)) {
+      if (matchesKnown(bi)) {
         tokens.push(bi);
         i += 2;
         continue;
@@ -784,12 +937,27 @@ function normalizeScores(raw: EmotionScores): EmotionScores {
  */
 export function analyzeSentiment(text: string): SentimentResult {
   const cleaned = stripMarkdown(text);
-  const tokens = tokenize(cleaned);
+  // Emoticon phải tách trước tokenize (bộ tách từ sẽ phá vỡ chúng).
+  const { cleaned: noEmo, positive: posEmo, negative: negEmo } = extractEmoticons(cleaned);
+  const tokens = tokenize(noEmo);
 
   const rawScores = emptyEmotionScores();
   let totalPolarity = 0;
   let sentimentWordCount = 0;
-  const totalWords = tokens.length;
+
+  // Mỗi emoticon tính như một "từ cảm xúc" nhẹ (polarity ±0.5).
+  if (posEmo > 0) {
+    totalPolarity += posEmo * 0.5;
+    rawScores.joy += posEmo * 0.6;
+    sentimentWordCount += posEmo;
+  }
+  if (negEmo > 0) {
+    totalPolarity -= negEmo * 0.5;
+    rawScores.sadness += negEmo * 0.6;
+    sentimentWordCount += negEmo;
+  }
+
+  const totalWords = tokens.length + posEmo + negEmo;
 
   // State machine
   let negationWindow = 0;
@@ -812,8 +980,8 @@ export function analyzeSentiment(text: string): SentimentResult {
       continue;
     }
 
-    // Lookup lexicon
-    const entry = EMOTION_LEXICON.get(token);
+    // Lookup lexicon (exact → fallback không dấu cho text teen/chat)
+    const entry = lookupLexicon(token);
     if (entry) {
       sentimentWordCount++;
 

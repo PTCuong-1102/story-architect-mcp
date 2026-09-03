@@ -3,7 +3,7 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../server/StoryProject.js';
-import { errResult } from '../utils/mcpResults.js';
+import { errResult, requireProject, isToolError } from '../utils/mcpResults.js';
 
 function generateDashboardHtml(
   configName: string,
@@ -163,7 +163,8 @@ export function registerDashboardTool(server: McpServer, getProject: () => Story
       }),
     },
     async (params) => {
-      const project = getProject();
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
       if (!await project.isInitialized()) {
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
