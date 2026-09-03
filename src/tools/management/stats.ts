@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
+import { computeGodNodes } from '../../utils/knowledgeGraph.js';
 
 export function registerStatsTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -79,6 +80,12 @@ export function registerStatsTool(server: McpServer, getProject: () => StoryProj
       const openHoles = holes.holes.filter(h => h.status === 'open').length;
       const resolvedHoles = holes.holes.filter(h => h.status === 'resolved').length;
 
+      // God-nodes: nhân vật trung tâm nhất theo bậc trong đồ thị quan hệ
+      const godNodes = computeGodNodes(relationships.relationships, 5);
+      const godNodesText = godNodes.length > 0
+        ? `\n\n🌟 Nhân vật trung tâm (god-nodes):\n${godNodes.map((g, i) => `  ${i + 1}. ${g.name} — ${g.degree} mối quan hệ`).join('\n')}`
+        : '';
+
       return {
         content: [{
           type: 'text' as const,
@@ -110,7 +117,7 @@ ${arcDetails.length > 0 ? '📖 Chi tiết:\n' + arcDetails.join('\n\n') : '  _C
   ✅ Đã giải quyết: ${resolvedHoles}
 
 👥 Quan hệ nhân vật: ${relationships.relationships.length}
-
+${godNodesText}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
         }],
       };

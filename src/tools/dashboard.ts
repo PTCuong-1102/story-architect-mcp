@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../server/StoryProject.js';
 import { errResult, requireProject, isToolError } from '../utils/mcpResults.js';
+import { computeGodNodes } from '../utils/knowledgeGraph.js';
 
 function generateDashboardHtml(
   configName: string,
@@ -18,6 +19,9 @@ function generateDashboardHtml(
 ): string {
   const openHoles = holes.filter(h => h.status === 'open');
   const unfiredGuns = guns.filter(g => g.status === 'planted');
+  const godNodes = computeGodNodes(relationships, 5);
+  const extractedCount = relationships.filter((r: any) => r.provenance === 'extracted').length;
+  const inferredCount = relationships.filter((r: any) => r.provenance === 'inferred').length;
   const toneLabel = sentimentCache?.overallTone || 'Chưa phân tích';
   const polarity = sentimentCache?.overallPolarity ?? 0;
 
@@ -143,6 +147,29 @@ function generateDashboardHtml(
         `).join('') : '<tr><td colspan="3" style="text-align: center; color: var(--success); padding: 1.5rem;">Tất cả chi tiết cài cắm đã được giải gỡ!</td></tr>'}
       </tbody>
     </table>
+  </div>
+
+  <h2 class="section-title">🌟 Nhân Vật Trung Tâm (God-Nodes) & Nguồn Gốc Quan Hệ</h2>
+  <div class="card" style="padding: 0; overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Nhân vật</th>
+          <th>Bậc (số mối quan hệ)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${godNodes.length > 0 ? godNodes.map((g, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td><b>${g.name}</b></td>
+            <td>${g.degree}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Chưa có mối quan hệ nào trong đồ thị.</td></tr>'}
+      </tbody>
+    </table>
+    <p class="meta" style="padding: 1rem 1.5rem;">🏷️ Nguồn gốc cạnh: <b>EXTRACTED</b> (người khẳng định): ${extractedCount} • <b>INFERRED</b> (máy suy ra): ${inferredCount} • <b>LEGACY</b> (dữ liệu cũ): ${relationships.length - extractedCount - inferredCount}</p>
   </div>
 
   <div class="footer">

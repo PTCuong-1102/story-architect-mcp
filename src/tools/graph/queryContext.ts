@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { countWords } from '../../utils/wordCount.js';
-import { loadOrBuildIndex, searchEntities, expandRelationships } from '../../utils/knowledgeGraph.js';
+import { loadOrBuildIndex, searchEntities, expandRelationships, findShortestPath, provenanceTag } from '../../utils/knowledgeGraph.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 
 export function registerQueryContextTool(server: McpServer, getProject: () => StoryProject): void {
@@ -10,12 +10,14 @@ export function registerQueryContextTool(server: McpServer, getProject: () => St
     'story_query_context',
     {
       title: 'Query Context Budget',
-      description: 'Trích xuất và tổng hợp Context Budget tối ưu nhất bằng Knowledge Graph (Bible + Relationships + Timeline) kết hợp ngân sách token.',
+      description: 'Trích xuất và tổng hợp Context Budget tối ưu nhất bằng Knowledge Graph (Bible + Relationships + Timeline) kết hợp ngân sách token. Truyền from+to để hỏi đường liên hệ ngắn nhất giữa hai nhân vật.',
       inputSchema: z.object({
         query: z.string().describe('Chủ đề hoặc từ khóa cần lấy context (ví dụ: "Tiêu Viêm Thanh Vân Sơn")'),
         budgetTokens: z.number().default(2000).describe('Ngân sách token tối đa cho context (mặc định 2000 tokens ~ 1500 từ)'),
         maxDepth: z.number().default(2).describe('Độ sâu mở rộng quan hệ nhân vật (BFS) trong đồ thị'),
         rebuildIndex: z.boolean().default(false).describe('Buộc build lại index .cbm/index.json từ dữ liệu mới nhất'),
+        from: z.string().optional().describe('Nhân vật xuất phát cho truy vấn đường đi (đi kèm to)'),
+        to: z.string().optional().describe('Nhân vật đích cho truy vấn đường đi (đi kèm from)'),
       }),
     },
     async (params) => {
@@ -33,6 +35,31 @@ export function registerQueryContextTool(server: McpServer, getProject: () => St
 
       // ─── Knowledge Graph: tìm thực thể + mở rộng quan hệ ───
       const index = await loadOrBuildIndex(project, params.rebuildIndex);
+
+      // ─── Chế độ đường đi: from + to → đường ngắn nhất giữa hai nhân vật ───
+      if (params.from && params.to) {
+        const path = findShortestPath(index, params.from, params.to);
+        if (!path) {
+          const known = [...new Set(index.relationships.flatMap(r => [r.source, r.target]))].sort();
+          return errResult(`❌ Không tìm thấy đường liên hệ giữa "${params.from}" và "${params.to}".\n\n💡 Kiểm tra tên nhân vật (phân biệt hoa/thường không quan trọng, chấp nhận alias). Các nhân vật đang có trong đồ thị: ${known.join(', ') || 'N/A'}`);
+        }
+        const hops = path.edges.length;
+        const hopLines = path.edges.map((e, i) => {
+          const hopDesc = e.description ? ` — ${e.description}` : '';
+          return `${i + 1}. ${path.nodes[i]} --[${e.type}, ${provenanceTag(e.provenance)}]--> ${path.nodes[i + 1]}${hopDesc}`;
+        });
+        const inferredCount = path.edges.filter(e => provenanceTag(e.provenance) === 'INFERRED').length;
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `🛤️ Đường liên hệ ngắn nhất: ${path.nodes[0]} → ${path.nodes[path.nodes.length - 1]} (${hops} hop${hops !== 1 ? 's' : ''})\n\n${hopLines.join('\n')}\n\n🏷️ Nguồn gốc cạnh: EXTRACTED = người khẳng định, INFERRED = máy suy ra từ đồng xuất hiện, LEGACY = dữ liệu cũ.${inferredCount > 0 ? `\n⚠️ ${inferredCount}/${hops} cạnh là INFERRED — nên xác minh trước khi dùng cho quyết định cốt truyện.` : ''}`,
+          }],
+        };
+      }
+      if ((params.from && !params.to) || (!params.from && params.to)) {
+        return errResult('❌ Truy vấn đường đi cần cả hai tham số: from và to (ví dụ: from="Tiêu Viêm", to="Na Lan").');
+      }
+
       const matches = searchEntities(index, params.query).slice(0, 5);
 
       const matchedCharacters = matches.filter(m => m.kind === 'character');
@@ -71,9 +98,9 @@ export function registerQueryContextTool(server: McpServer, getProject: () => St
       // Mở rộng đồ thị: các quan hệ và nhân vật liên quan qua BFS
       if (edges.length > 0) {
         const edgeText = edges
-          .map(e => `- ${e.source} ↔ ${e.target}: ${e.type}${e.description ? ` — ${e.description}` : ''}`)
+          .map(e => `- ${e.source} ↔ ${e.target}: ${e.type} [${provenanceTag(e.provenance)}]${e.description ? ` — ${e.description}` : ''}`)
           .join('\n');
-        contextBlocks.push(`## Đồ thị quan hệ (mở rộng độ sâu ${params.maxDepth})\n${edgeText}\n`);
+        contextBlocks.push(`## Đồ thị quan hệ (mở rộng độ sâu ${params.maxDepth})\n${edgeText}\n_Nhãn nguồn gốc: EXTRACTED = người khẳng định, INFERRED = máy suy ra, LEGACY = dữ liệu cũ._\n`);
         if (relatedNames.length > 0) {
           contextBlocks.push(`## Nhân vật liên quan khác\n${relatedNames.map(n => `- ${n}`).join('\n')}\n`);
         }

@@ -147,6 +147,14 @@ export const RelationshipSchema = z.object({
     'family', 'mentor', 'student', 'stranger', 'other'
   ]),
   description: z.string().default(''),
+  /**
+   * Nguồn gốc quan hệ (học từ Graphify: EXTRACTED vs INFERRED).
+   * - 'extracted': người dùng khẳng định thủ công (source/target/type rõ ràng).
+   * - 'inferred': máy suy ra từ đồng xuất hiện (auto-scan), độ tin cậy thấp hơn.
+   * - undefined: dữ liệu cũ trước khi có trường này (hiển thị là LEGACY).
+   * Để optional (không default) để không gán nhãn sai cho dữ liệu legacy.
+   */
+  provenance: z.enum(['extracted', 'inferred']).optional(),
   startChapter: z.string().optional(),
   endChapter: z.string().optional(),
   evolution: z.array(z.object({

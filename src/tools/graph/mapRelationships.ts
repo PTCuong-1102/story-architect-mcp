@@ -54,7 +54,7 @@ export function registerMapRelationshipsTool(server: McpServer, getProject: () =
     'story_map_relationships',
     {
       title: 'Map Character Relationships Graph',
-      description: 'Phân tích bản thảo và tự động cập nhật Đồ thị quan hệ nhân vật vào .story/relationships.json. Nếu bỏ trống source/target sẽ tự quét toàn bộ manuscript để phát hiện các cặp nhân vật đồng xuất hiện.',
+      description: 'Phân tích bản thảo và tự động cập nhật Đồ thị quan hệ nhân vật vào .story/relationships.json. Nếu bỏ trống source/target sẽ tự quét toàn bộ manuscript để phát hiện các cặp nhân vật đồng xuất hiện. Mỗi quan hệ mang nhãn nguồn gốc: EXTRACTED (người khẳng định) hoặc INFERRED (máy suy ra).',
       inputSchema: z.object({
         source: z.string().optional().describe('Nhân vật A (bỏ trống để chạy chế độ tự quét)'),
         target: z.string().optional().describe('Nhân vật B (bỏ trống để chạy chế độ tự quét)'),
@@ -117,6 +117,8 @@ export function registerMapRelationshipsTool(server: McpServer, getProject: () =
               source: pair.a,
               target: pair.b,
               type: 'other',
+              // Máy suy ra từ đồng xuất hiện → INFERRED (độ tin cậy thấp hơn tay)
+              provenance: 'inferred',
               description: `Đồng xuất hiện trong ${pair.chapters} chương (phát hiện tự động)`,
               evolution: [{
                 chapter: params.chapter || 'auto-scan',
@@ -143,7 +145,7 @@ ${report.join('\n')}
 📊 Kết quả: tạo mới ${created} | cập nhật ${updated}
 📊 Tổng số mối quan hệ trong đồ thị: ${data.relationships.length}
 
-💡 Các quan hệ tạo tự động có type = "other". Dùng chế độ thủ công (truyền source/target/type) để gán loại quan hệ chính xác.`,
+💡 Các quan hệ tạo tự động có type = "other" và nhãn INFERRED (máy suy ra). Dùng chế độ thủ công (truyền source/target/type) để gán loại quan hệ chính xác — khi đó nhãn nâng lên EXTRACTED.`,
           }],
         };
       }
@@ -163,6 +165,8 @@ ${report.join('\n')}
         const oldType = rel.type;
         rel.type = params.type;
         if (params.description) rel.description = params.description;
+        // Người khẳng định thủ công → nâng lên EXTRACTED dù trước đó là INFERRED
+        rel.provenance = 'extracted';
 
         if (params.chapter) {
           rel.evolution.push({
@@ -177,6 +181,8 @@ ${report.join('\n')}
           target: params.target,
           type: params.type,
           description: params.description || '',
+          // Khai báo thủ công với type rõ ràng → EXTRACTED
+          provenance: 'extracted',
           startChapter: params.chapter,
           evolution: params.chapter ? [{
             chapter: params.chapter,
@@ -196,6 +202,7 @@ ${report.join('\n')}
 
 👥 ${params.source} ↔ ${params.target}
 🤝 Mối quan hệ: ${params.type}
+🏷️ Nguồn gốc: EXTRACTED (người khẳng định thủ công)
 📝 Mô tả: ${params.description || 'N/A'}
 ${params.chapter ? `📖 Ghi nhận tại chương: ${params.chapter}` : ''}
 
