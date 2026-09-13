@@ -58,9 +58,11 @@ test('CLI: injectMcpConfig creates backup and safely merges mcpServers', () => {
 
 test('CLI: runInitNovel scaffolds complete novel workspace with starter templates', async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'story-novel-init-test-'));
+  const originalLog = console.log;
+  console.log = () => {};
 
   try {
-    await runInitNovel([tmpDir, '--yes']);
+    await runInitNovel([tmpDir, '--yes', '--silent']);
 
     const project = new StoryProject(tmpDir);
     const isInit = await project.isInitialized();
@@ -72,6 +74,7 @@ test('CLI: runInitNovel scaffolds complete novel workspace with starter template
     assert.ok(fs.existsSync(path.join(tmpDir, 'outline', 'synopsis.md')));
     assert.ok(fs.existsSync(path.join(tmpDir, 'manuscript', 'arc_01', 'ch_001.md')));
   } finally {
+    console.log = originalLog;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });

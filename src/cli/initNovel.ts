@@ -20,14 +20,18 @@ export async function runInitNovel(args: string[] = []): Promise<void> {
   let targetPath = args.find((a) => !a.startsWith('-')) || '.';
   const isAutoYes = args.includes('--yes') || args.includes('-y');
 
+  const isSilent = args.includes('--silent') || process.env.NODE_ENV === 'test';
+
   const resolvedPath = path.resolve(targetPath);
 
-  console.log(`
+  if (!isSilent) {
+    console.log(`
 ╔══════════════════════════════════════════════════════════════════╗
 ║               INIT NOVEL PROJECT SCAFFOLDING                     ║
 ║           Khởi Tạo Dự Án Tiểu Thuyết Chuẩn MCP                   ║
 ╚══════════════════════════════════════════════════════════════════╝
 `);
+  }
 
   let name = path.basename(resolvedPath) || 'My Epic Novel';
   let author = 'Tác Giả';
@@ -38,7 +42,7 @@ export async function runInitNovel(args: string[] = []): Promise<void> {
   let targetWordCount = 80000;
 
   if (!isAutoYes) {
-    console.log(`📁 Thư mục dự án: ${resolvedPath}\n`);
+    if (!isSilent) console.log(`📁 Thư mục dự án: ${resolvedPath}\n`);
     const inputName = await askQuestion(`1. Tên tác phẩm [${name}]: `);
     if (inputName) name = inputName;
 
@@ -72,11 +76,11 @@ export async function runInitNovel(args: string[] = []): Promise<void> {
   const project = new StoryProject(resolvedPath);
 
   if (await project.isInitialized()) {
-    console.log(`\n⚠️  Dự án tại ${resolvedPath} đã được khởi tạo trước đó.`);
+    if (!isSilent) console.log(`\n⚠️  Dự án tại ${resolvedPath} đã được khởi tạo trước đó.`);
     return;
   }
 
-  console.log(`\n⚙️ Đang tạo cấu trúc thư mục & dữ liệu ban đầu...`);
+  if (!isSilent) console.log(`\n⚙️ Đang tạo cấu trúc thư mục & dữ liệu ban đầu...`);
 
   await project.initializeProject({
     name,
@@ -180,7 +184,8 @@ Trong căn gác xép nhỏ ngập tràn mùi thảo dược và bụi giấy, c�
     );
   }
 
-  console.log(`
+  if (!isSilent) {
+    console.log(`
 🎉 KHỞI TẠO THÀNH CÔNG DỰ ÁN TIỂU THUYẾT: "${name}"!
 📁 Vị trí: ${resolvedPath}
 
@@ -194,4 +199,5 @@ Các thư mục và file mẫu đã sẵn sàng:
 👉 Bạn có thể mở dự án này trên Claude Desktop / Cursor / Antigravity và bảo AI:
    "Hãy cùng tôi lập dàn ý chi tiết cho Arc 1 dựa trên synopsis.md!"
 `);
+  }
 }
