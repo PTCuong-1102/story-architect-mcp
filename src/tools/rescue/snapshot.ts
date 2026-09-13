@@ -16,7 +16,8 @@ import { invalidateIndex } from '../../utils/knowledgeGraph.js';
 export async function createSnapshot(
   project: StoryProject,
   label: string,
-  description = ''
+  description = '',
+  extraSourceFiles: string[] = []
 ): Promise<Snapshot & { snapshotDir: string }> {
   const snapshotsDir = project.getSnapshotsDir();
   await fs.mkdir(snapshotsDir, { recursive: true });
@@ -42,30 +43,52 @@ export async function createSnapshot(
     }
   }
 
+  const countFiles = async (dir: string): Promise<number> => {
+    let count = 0;
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile()) count++;
+      else if (entry.isDirectory()) count += await countFiles(path.join(dir, entry.name));
+    }
+    return count;
+  };
+
   if (await exists(project.manuscriptDir)) {
     await copyDir(project.manuscriptDir, path.join(snapshotDir, 'manuscript'));
-    const countFiles = async (dir: string): Promise<number> => {
-      let count = 0;
-      const entries = await fs.readdir(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isFile()) count++;
-        else if (entry.isDirectory()) count += await countFiles(path.join(dir, entry.name));
-      }
-      return count;
-    };
     fileCount += await countFiles(project.manuscriptDir);
   }
 
   if (await exists(project.bibleDir)) {
     await copyDir(project.bibleDir, path.join(snapshotDir, 'bible'));
+    fileCount += await countFiles(project.bibleDir);
   }
 
   if (await exists(project.outlineDir)) {
     await copyDir(project.outlineDir, path.join(snapshotDir, 'outline'));
+    fileCount += await countFiles(project.outlineDir);
   }
 
   if (await exists(project.draftsRawDir)) {
     await copyDir(project.draftsRawDir, path.join(snapshotDir, 'drafts_raw'));
+    fileCount += await countFiles(project.draftsRawDir);
+  }
+
+  // Sao lưu các file unstructured nguồn (nếu có, dùng cho pre-refactor)
+  if (extraSourceFiles.length > 0) {
+    const unstrDir = path.join(snapshotDir, 'unstructured');
+    const manifestPath = path.join(snapshotDir, 'unstructured_manifest.json');
+    const manifest: string[] = [];
+    for (const rel of extraSourceFiles) {
+      const srcFile = path.join(project.projectPath, rel);
+      if (await exists(srcFile)) {
+        const destFile = path.join(unstrDir, rel);
+        await fs.mkdir(path.dirname(destFile), { recursive: true });
+        await fs.copyFile(srcFile, destFile);
+        manifest.push(rel);
+        fileCount++;
+      }
+    }
+    await writeJsonFile(manifestPath, manifest);
   }
 
   const indexPath = path.join(snapshotsDir, 'index.json');
@@ -313,6 +336,22 @@ ${storyDeletions.length > 0 ? storyDeletions.map(f => `      - ${f}`).join('\n')
       await restoreDir(path.join(snapshotDir, 'bible'), project.bibleDir);
       await restoreDir(path.join(snapshotDir, 'outline'), project.outlineDir);
       await restoreDir(path.join(snapshotDir, 'drafts_raw'), project.draftsRawDir);
+
+      // Khôi phục các file unstructured nguồn nếu snapshot có lưu (từ pre-refactor)
+      const manifestPath = path.join(snapshotDir, 'unstructured_manifest.json');
+      const unstrDir = path.join(snapshotDir, 'unstructured');
+      const manifest: string[] | null = await readJsonFile<string[]>(manifestPath);
+      if (manifest && Array.isArray(manifest) && await exists(unstrDir)) {
+        for (const rel of manifest) {
+          const snapFile = path.join(unstrDir, rel);
+          const destFile = path.join(project.projectPath, rel);
+          if (await exists(snapFile)) {
+            await fs.mkdir(path.dirname(destFile), { recursive: true });
+            await fs.copyFile(snapFile, destFile);
+          }
+        }
+      }
+
       // Mọi thứ có thể đã đổi → graph cache cũ
       await invalidateIndex(project);
 

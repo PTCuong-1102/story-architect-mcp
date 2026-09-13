@@ -10,7 +10,7 @@ import { errResult, requireProject, isToolError } from '../../utils/mcpResults.j
 /**
  * Trích xuất tên riêng dạng Title Case hoặc Capitalized words từ văn bản.
  */
-function extractCapitalizedTerms(text: string): { names: string[]; locations: string[] } {
+export function extractCapitalizedTerms(text: string): { names: string[]; locations: string[] } {
   // Loại bỏ Markdown markup
   const cleaned = text.replace(/^#{1,6}\s+/gm, '').replace(/[*_~`]/g, '');
 
@@ -40,8 +40,8 @@ function extractCapitalizedTerms(text: string): { names: string[]; locations: st
   for (const word of words) {
     // Token chứa dấu ngắt câu/phẩy → xử lý phần chữ rồi cắt chunk ngay
     const boundary = /[,.!?;:…]/.test(word);
-    const cleanWord = word.replace(/^[^\w\u00C0-\u024F\u1EA0-\u1EF9]+|[^\w\u00C0-\u024F\u1EA0-\u1EF9]+$/g, '');
-    if (cleanWord.length > 1 && /^[A-ZÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝĐẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼỀỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴỶỸ]/.test(cleanWord)) {
+    const cleanWord = word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    if (cleanWord.length > 1 && /^\p{Lu}/u.test(cleanWord)) {
       if (!ignoreWords.has(cleanWord)) {
         currentChunk.push(cleanWord);
       } else {
@@ -165,17 +165,28 @@ ${locReport}
       let createdChars = 0;
       let createdWorld = 0;
 
+      const sanitizeEntityFileName = (raw: string): string => {
+        const cleaned = raw
+          .toLowerCase()
+          .trim()
+          .replace(/[/\\:*?"<>|\x00-\x1f]+/g, '_')
+          .replace(/\.{2,}/g, '_')
+          .replace(/\s+/g, '_')
+          .replace(/^_+|_+$/g, '');
+        return (cleaned || 'entity') + '.md';
+      };
+
       const charDir = path.join(project.bibleDir, 'characters');
       const worldDir = path.join(project.bibleDir, 'world');
       await fs.mkdir(charDir, { recursive: true });
       await fs.mkdir(worldDir, { recursive: true });
 
       for (const name of newCharacters) {
-        const fileName = `${name.toLowerCase().replace(/\s+/g, '_')}.md`;
+        const fileName = sanitizeEntityFileName(name);
         const filePath = path.join(charDir, fileName);
         if (!await exists(filePath)) {
           const charContent = `---
-name: "${name}"
+name: ${JSON.stringify(name)}
 role: "supporting"
 aliases: []
 firstAppearance: "${params.arc}/${params.chapter}"
@@ -199,11 +210,11 @@ _Mô tả tổng quan về nhân vật ${name}._
       }
 
       for (const loc of newLocations) {
-        const fileName = `${loc.toLowerCase().replace(/\s+/g, '_')}.md`;
+        const fileName = sanitizeEntityFileName(loc);
         const filePath = path.join(worldDir, fileName);
         if (!await exists(filePath)) {
           const locContent = `---
-name: "${loc}"
+name: ${JSON.stringify(loc)}
 type: "location"
 relatedCharacters: []
 ---

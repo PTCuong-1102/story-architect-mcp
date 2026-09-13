@@ -82,6 +82,22 @@ function simpleSimilarity(a: string, b: string): number {
   return intersection.size / union.size;
 }
 
+function isBinaryBuffer(buf: Buffer): boolean {
+  if (buf.length === 0) return false;
+  // OLE2 Compound Document Header (Microsoft Word .doc): D0 CF 11 E0 A1 B1 1A E1
+  if (buf.length >= 8 &&
+      buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0 &&
+      buf[4] === 0xa1 && buf[5] === 0xb1 && buf[6] === 0x1a && buf[7] === 0xe1) {
+    return true;
+  }
+  // Kiểm tra null byte trong 1024 bytes đầu
+  const checkLen = Math.min(buf.length, 1024);
+  for (let i = 0; i < checkLen; i++) {
+    if (buf[i] === 0) return true;
+  }
+  return false;
+}
+
 export function registerScanMessyProjectTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
     'story_scan_messy_project',
@@ -119,19 +135,35 @@ export function registerScanMessyProjectTool(server: McpServer, getProject: () =
 
       for (const file of files) {
         const buffer = await readFileBuffer(file) || Buffer.alloc(0);
-        const encoding = detectTextEncoding(buffer);
-        const content = decodeBuffer(buffer, encoding);
+        const isBinary = isBinaryBuffer(buffer);
         const relPath = path.relative(scanPath, file);
-        const words = countWords(content);
+
+        let encoding: string = 'utf-8';
+        let content = '';
+        let words = 0;
+
+        if (isBinary) {
+          encoding = 'binary';
+          content = ''; // Không decode nhị phân rác
+          words = 0;
+        } else {
+          const textEncoding = detectTextEncoding(buffer);
+          encoding = textEncoding;
+          content = decodeBuffer(buffer, textEncoding);
+          words = countWords(content);
+        }
+
         const { category, confidence } = classifyFile(file, content);
 
-        fileContents.set(relPath, content);
+        if (content) {
+          fileContents.set(relPath, content);
+        }
 
         classifications.push({
           path: relPath,
           category,
-          confidence,
-          encoding: encoding === 'ascii' ? 'utf-8' : encoding,
+          confidence: isBinary ? Math.min(confidence, 0.7) : confidence,
+          encoding: isBinary ? 'binary' : (encoding === 'ascii' ? 'utf-8' : encoding),
           wordCount: words,
           similarTo: [],
         });

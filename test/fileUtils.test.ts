@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectTextEncoding, decodeBuffer, isSafePathSegment } from '../src/utils/fileUtils.js';
+import { detectTextEncoding, decodeBuffer, isSafePathSegment, isSafeWritePath } from '../src/utils/fileUtils.js';
 
 test('detectTextEncoding: UTF-8 hợp lệ', () => {
   assert.equal(detectTextEncoding(Buffer.from('Một buổi sáng đẹp trời', 'utf-8')), 'utf-8');
@@ -48,4 +48,14 @@ test('isSafePathSegment: chặn path traversal', () => {
   assert.equal(isSafePathSegment('a\\b'), false);
   assert.equal(isSafePathSegment('..\\..'), false);
   assert.equal(isSafePathSegment('a\0b'), false);
+});
+
+test('isSafeWritePath: cho phép đường dẫn hợp lệ và chặn đường dẫn nguy hiểm', () => {
+  assert.equal(isSafeWritePath('/tmp/test-export.html'), true);
+  assert.equal(isSafeWritePath('./export/book.epub'), true);
+  assert.equal(isSafeWritePath('/etc/passwd'), false);
+  assert.equal(isSafeWritePath('/etc/cron.d/job'), false);
+  assert.equal(isSafeWritePath('/root/.bashrc'), false);
+  assert.equal(isSafeWritePath('/project/.git/config'), false);
+  assert.equal(isSafeWritePath('./.story/config.json'), false);
 });

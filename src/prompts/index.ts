@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { StoryProject } from '../server/StoryProject.js';
-import { readTextFile, isSafePathSegment } from '../utils/fileUtils.js';
+import { readTextFile, isSafePathSegment, compareNatural } from '../utils/fileUtils.js';
 import * as path from 'node:path';
 
 /**
@@ -27,11 +27,12 @@ export function registerPrompts(server: McpServer, getProject: () => StoryProjec
       const foreshadowing = await project.getForeshadowing();
 
       const chapters = await project.listChaptersInArc(arc);
+      const priorChapters = chapters.filter(ch => compareNatural(ch, chapter) < 0);
 
       let previousChapterContent = '';
-      if (chapters.length > 0) {
-        const lastChapter = chapters[chapters.length - 1];
-        const content = await project.getChapterContent(arc, lastChapter);
+      if (priorChapters.length > 0) {
+        const prevChapter = priorChapters[priorChapters.length - 1];
+        const content = await project.getChapterContent(arc, prevChapter);
         if (content) {
           previousChapterContent = content.length > 2000
             ? '...\n' + content.slice(-2000)

@@ -147,22 +147,50 @@ ${historyLines}`,
         };
       }
 
-      // "Gần nhất" = mốc có thứ tự chương lớn nhất (tự nhiên), không phải
-      // phần tử log cuối cùng — vì user có thể log ch_002 sau ch_010.
-      const latest = [...charHistory.states].sort((a, b) => compareNatural(a.chapter, b.chapter)).pop()!;
+      let targetState: CharacterStateSnapshot | undefined;
+      let targetDesc = '';
+
+      if (params.chapter) {
+        const queryNorm = normKey(params.chapter);
+        targetState = charHistory.states.find(s => normKey(s.chapter) === queryNorm);
+        if (!targetState) {
+          // Tìm mốc gần nhất ghi nhận trước hoặc tại chương này
+          const priorStates = charHistory.states
+            .filter(s => compareNatural(s.chapter, params.chapter!) <= 0)
+            .sort((a, b) => compareNatural(a.chapter, b.chapter));
+          targetState = priorStates.pop();
+          if (targetState) {
+            targetDesc = `Trạng thái của "${params.character}" tính đến ${params.chapter} (mốc gần nhất tại ${targetState.chapter})`;
+          } else {
+            return {
+              content: [{
+                type: 'text' as const,
+                text: `ℹ️ Không tìm thấy trạng thái nào của "${params.character}" tại hoặc trước chương "${params.chapter}".`,
+              }],
+            };
+          }
+        } else {
+          targetDesc = `Trạng thái của "${params.character}" tại ${targetState.chapter}`;
+        }
+      } else {
+        // "Gần nhất" = mốc có thứ tự chương lớn nhất (tự nhiên), không phải
+        // phần tử log cuối cùng — vì user có thể log ch_002 sau ch_010.
+        targetState = [...charHistory.states].sort((a, b) => compareNatural(a.chapter, b.chapter)).pop()!;
+        targetDesc = `Trạng thái gần nhất của "${params.character}" (tại ${targetState.chapter})`;
+      }
 
       return {
         content: [{
           type: 'text' as const,
-          text: `👤 Trạng thái gần nhất của "${params.character}" (tại ${latest.chapter}):
+          text: `👤 ${targetDesc}:
 
-📍 **Vị trí**: ${latest.location || '_không rõ_'}
-🛡️ **Tình trạng**: ${latest.status} ${latest.condition ? `(${latest.condition})` : ''}
-🎒 **Hành trang / Vật phẩm** (${latest.inventory.length}):
-${latest.inventory.length > 0 ? latest.inventory.map(i => `  - ${i}`).join('\n') : '  _Trống_'}
-🗝️ **Bí mật / Thông tin đang nắm giữ** (${latest.knownSecrets.length}):
-${latest.knownSecrets.length > 0 ? latest.knownSecrets.map(k => `  - ${k}`).join('\n') : '  _Không có_'}
-📝 **Ghi chú**: ${latest.notes || '_không có_'}`,
+📍 **Vị trí**: ${targetState.location || '_không rõ_'}
+🛡️ **Tình trạng**: ${targetState.status} ${targetState.condition ? `(${targetState.condition})` : ''}
+🎒 **Hành trang / Vật phẩm** (${targetState.inventory.length}):
+${targetState.inventory.length > 0 ? targetState.inventory.map(i => `  - ${i}`).join('\n') : '  _Trống_'}
+🗝️ **Bí mật / Thông tin đang nắm giữ** (${targetState.knownSecrets.length}):
+${targetState.knownSecrets.length > 0 ? targetState.knownSecrets.map(k => `  - ${k}`).join('\n') : '  _Không có_'}
+📝 **Ghi chú**: ${targetState.notes || '_không có_'}`,
         }],
       };
     }

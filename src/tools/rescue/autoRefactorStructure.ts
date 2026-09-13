@@ -136,7 +136,7 @@ export function registerAutoRefactorTool(server: McpServer, getProject: () => St
       }
 
       const standardDirs = ['.story', '.cbm', 'bible', 'manuscript', 'outline', 'drafts_raw', 'export', 'node_modules'];
-      const allFiles = await walkDir(projectPath, ['.md', '.txt']);
+      const allFiles = await walkDir(projectPath, ['.md', '.txt', '.doc', '.rtf']);
 
       const unstruturedFiles = allFiles.filter(f => {
         const rel = path.relative(projectPath, f);
@@ -170,7 +170,8 @@ export function registerAutoRefactorTool(server: McpServer, getProject: () => St
       const actions: RefactorAction[] = [];
       let seq = 0;
       for (const file of orderedFiles) {
-        const content = await readTextFile(file) || '';
+        const ext = path.extname(file).toLowerCase();
+        const content = (ext === '.doc' || ext === '.rtf') ? '' : (await readTextFile(file) || '');
         const relPath = path.relative(projectPath, file);
         const action = determineDestination(relPath, content, params.strategy, seq);
         actions.push(action);
@@ -229,11 +230,12 @@ ${preview}
         const snapshot = await createSnapshot(
           new StoryProject(path.resolve(projectPath)),
           'pre-refactor',
-          `Auto-snapshot trước khi tái cấu trúc (chiến lược: ${params.strategy})`
+          `Auto-snapshot trước khi tái cấu trúc (chiến lược: ${params.strategy})`,
+          unstruturedFiles.map(f => path.relative(projectPath, f))
         );
         snapshotId = snapshot.id;
       } catch (err) {
-        errors.push(`  ⚠️ Không thể tạo snapshot an toàn: ${err instanceof Error ? err.message : String(err)}`);
+        return errResult(`❌ Không thể tạo snapshot an toàn trước khi tái cấu trúc. Đã hủy thao tác để bảo vệ dữ liệu.\n\nLỗi: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       for (const action of actions) {

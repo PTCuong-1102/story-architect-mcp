@@ -161,6 +161,24 @@ test('story_analyze_voice: tích hợp thông tin cảm xúc & so sánh style gu
   assert.ok(res.content[0].text.includes('Cảm xúc chủ đạo'));
 });
 
+test('story_analyze_voice: nhận diện chính xác POV tiếng Việt có dấu (ông, bà, mình)', async () => {
+  const p = await freshProject();
+  await fs.writeFile(
+    path.join(p.manuscriptDir, 'arc_01', 'ch_001.md'),
+    'Ông lão chậm rãi ngồi xuống ghế. Bà mỉm cười dịu dàng rót trà cho ông.',
+    'utf-8'
+  );
+
+  const { server, handlers } = makeFakeServer();
+  registerAnalyzeVoiceTool(server, () => p);
+
+  const handler = handlers.get('story_analyze_voice');
+  assert.ok(handler);
+
+  const res = await handler({ arc: 'arc_01' });
+  assert.ok(res.content[0].text.includes('Ngôi thứ ba (Third person)'), 'Phải nhận diện được ngôi thứ ba khi dùng đại từ ông, bà');
+});
+
 test('story://emotions resource: trả về dữ liệu cache hoặc thông báo chưa có dữ liệu', async () => {
   const p = await freshProject();
   const { server, resources } = makeFakeServer();
@@ -210,4 +228,31 @@ test('story_generate_writing_prompt: inject bối cảnh cảm xúc và định 
 
   assert.ok(promptText.includes('BỐI CẢNH CẢM XÚC'));
   assert.ok(promptText.includes('Giọng văn chương trước'));
+});
+
+test('story_generate_writing_prompt: lấy đúng chương liền trước khi viết chương ở giữa', async () => {
+  const p = await freshProject();
+  await fs.writeFile(
+    path.join(p.manuscriptDir, 'arc_01', 'ch_001.md'),
+    'Nội dung duy nhất của chương một: Thanh kiếm gia truyền được rút ra.',
+    'utf-8'
+  );
+  await fs.writeFile(
+    path.join(p.manuscriptDir, 'arc_01', 'ch_003.md'),
+    'Nội dung chương ba đã viết trước: Đỉnh núi tuyết đóng băng ngàn năm.',
+    'utf-8'
+  );
+
+  const { server, handlers } = makeFakeServer();
+  registerGenerateWritingPromptTool(server, () => p);
+
+  const promptHandler = handlers.get('story_generate_writing_prompt');
+  assert.ok(promptHandler);
+
+  // Sinh prompt cho ch_002: chương trước phải là ch_001 (chứa thanh kiếm gia truyền), KHÔNG PHẢI ch_003 (đỉnh núi tuyết)
+  const res = await promptHandler({ arc: 'arc_01', chapter: 'ch_002', strategy: 'continue' });
+  const promptText = res.content[0].text;
+
+  assert.ok(promptText.includes('Thanh kiếm gia truyền'), 'Phải chứa nội dung của ch_001 đứng liền trước');
+  assert.ok(!promptText.includes('Đỉnh núi tuyết'), 'Không được lấy nội dung ch_003 đứng sau ch_002');
 });

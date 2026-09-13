@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import * as path from 'node:path';
 import { StoryProject } from '../server/StoryProject.js';
-import { readTextFile, isSafePathSegment } from '../utils/fileUtils.js';
+import { readTextFile, isSafePathSegment, compareNatural } from '../utils/fileUtils.js';
 import { TONE_LABELS, polarityLabel, type ToneCategory } from '../utils/sentimentLexicon.js';
 import { errResult, requireProject, isToolError } from '../utils/mcpResults.js';
 
@@ -31,12 +31,14 @@ export function registerGenerateWritingPromptTool(server: McpServer, getProject:
       const styleGuide = await project.getStyleGuide();
       const foreshadowing = await project.getForeshadowing();
 
-      // Read previous chapter content
+      // Read previous chapter content (lấy đúng chương đứng ngay trước chapter hiện tại)
       const chapters = await project.listChaptersInArc(params.arc);
+      const priorChapters = chapters.filter(ch => compareNatural(ch, params.chapter) < 0);
       let previousContent = '';
-      if (chapters.length > 0) {
-        const lastCh = chapters[chapters.length - 1];
-        const content = await project.getChapterContent(params.arc, lastCh);
+      let prevChName = '';
+      if (priorChapters.length > 0) {
+        prevChName = priorChapters[priorChapters.length - 1];
+        const content = await project.getChapterContent(params.arc, prevChName);
         if (content) {
           previousContent = content.length > 1500 ? '...\n' + content.slice(-1500) : content;
         }
@@ -59,9 +61,13 @@ export function registerGenerateWritingPromptTool(server: McpServer, getProject:
       const emotionsCache = await project.getSentimentCache();
       let sentimentContext = '';
       if (emotionsCache && emotionsCache.chapters.length > 0) {
-        const lastChSentiment = emotionsCache.chapters[emotionsCache.chapters.length - 1];
-        const lastToneLabel = TONE_LABELS[lastChSentiment.dominantTone as ToneCategory] || lastChSentiment.dominantTone;
-        sentimentContext = `\n[BỐI CẢNH CẢM XÚC (từ story_analyze_sentiment)]\nGiọng văn chương trước: ${lastToneLabel} (polarity: ${lastChSentiment.polarity.toFixed(2)})\nCảm xúc chủ đạo chương trước: ${lastChSentiment.dominantEmotion}`;
+        const targetSentimentCh = prevChName
+          ? (emotionsCache.chapters.find(c => c.chapter === prevChName) || emotionsCache.chapters[emotionsCache.chapters.length - 1])
+          : emotionsCache.chapters[emotionsCache.chapters.length - 1];
+        if (targetSentimentCh) {
+          const lastToneLabel = TONE_LABELS[targetSentimentCh.dominantTone as ToneCategory] || targetSentimentCh.dominantTone;
+          sentimentContext = `\n[BỐI CẢNH CẢM XÚC (từ story_analyze_sentiment)]\nGiọng văn chương trước: ${lastToneLabel} (polarity: ${targetSentimentCh.polarity.toFixed(2)})\nCảm xúc chủ đạo chương trước: ${targetSentimentCh.dominantEmotion}`;
+        }
 
         // Emotional arc guidance
         if (styleGuide.expectedEmotionalArc) {

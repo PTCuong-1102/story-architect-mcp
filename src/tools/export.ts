@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { StoryProject } from '../server/StoryProject.js';
 import { markdownToHtml, htmlDocument } from '../utils/markdownToHtml.js';
 import { createZip } from '../utils/zip.js';
-import { findMarkdownFiles, readTextFile } from '../utils/fileUtils.js';
+import { findMarkdownFiles, readTextFile, isSafeWritePath } from '../utils/fileUtils.js';
 import { errResult, requireProject, isToolError } from '../utils/mcpResults.js';
 
 /**
@@ -367,7 +367,14 @@ export function registerExportTool(server: McpServer, getProject: () => StoryPro
         epub: '.epub',
         docx: '.docx',
       };
-      const outputPath = params.outputPath || path.join(outputDir, baseName + (extMap[format] ?? '.md'));
+      const outputPath = params.outputPath
+        ? path.resolve(params.outputPath)
+        : path.join(outputDir, baseName + (extMap[format] ?? '.md'));
+
+      if (!isSafeWritePath(outputPath)) {
+        return errResult(`❌ Đường dẫn xuất file không an toàn hoặc nằm trong thư mục cấm: ${outputPath}`);
+      }
+
       const language = config.language || 'vi';
 
       const outlineMd = params.includeOutline ? await collectOutline(project) : '';

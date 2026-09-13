@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import type { TimelineEvent } from '../../server/types.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
-import { compareNatural } from '../../utils/fileUtils.js';
+import { compareNatural, generateId } from '../../utils/fileUtils.js';
 import { invalidateIndex } from '../../utils/knowledgeGraph.js';
 
 /** So sánh hai chuỗi chương theo thứ tự tự nhiên (dùng chung với StoryProject). */
@@ -148,7 +148,7 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
       // Thêm sự kiện nếu truyền vào
       if (params.addEvent) {
         timeline.events.push({
-          id: 'evt_' + Date.now().toString(36),
+          id: 'evt_' + generateId(),
           label: params.addEvent.label,
           description: params.addEvent.description || '',
           chapter: params.addEvent.chapter,

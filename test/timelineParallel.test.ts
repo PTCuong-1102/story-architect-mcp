@@ -87,6 +87,24 @@ test('timeline parallel & dashboard tools', async (t) => {
     assert.ok(html.includes('Story Architect Dashboard'));
   });
 
+  await t.test('detectTimeline: các ID sự kiện sinh tự động luôn duy nhất không trùng lặp', async () => {
+    const handler = tools['story_detect_timeline_conflicts'].handler;
+    const promises = Array.from({ length: 10 }, (_, i) =>
+      handler({
+        addEvent: {
+          label: `Sự kiện nhanh ${i}`,
+          relativeOrder: i + 10,
+        },
+      })
+    );
+    await Promise.all(promises);
+
+    const timeline = await project.getTimeline();
+    const eventIds = timeline.events.map(e => e.id);
+    const uniqueIds = new Set(eventIds);
+    assert.equal(uniqueIds.size, eventIds.length, 'Tất cả event ID phải duy nhất, không trùng nhau');
+  });
+
   // Cleanup
   await fs.rm(tmpDir, { recursive: true, force: true });
 });

@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildIndex, searchEntities, expandRelationships, findShortestPath, computeGodNodes, provenanceTag, resolveNodeName } from '../src/utils/knowledgeGraph.js';
+import { extractCapitalizedTerms, registerExtractEntitiesTool } from '../src/tools/graph/extractEntities.js';
 import { StoryProject } from '../src/server/StoryProject.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -38,6 +40,12 @@ Ngọn núi nơi Tiêu Viêm tu luyện.
       { source: 'Bóng Ma', target: 'Bóng Ma', type: 'other', description: 'Tự liên hệ (bỏ qua khi dựng đồ thị)', evolution: [] },
     ],
     updatedAt: new Date().toISOString(),
+  }));
+
+  await fs.writeFile(path.join(dir, '.story', 'config.json'), JSON.stringify({
+    name: 'Đấu Phá',
+    author: 'Thiên Tằm',
+    genre: ['Tiên Hiệp'],
   }));
 
   return new StoryProject(dir);
@@ -139,3 +147,64 @@ test('computeGodNodes: Na Lan trung tâm nhất, gộp tên trùng hoa/thường
   assert.equal(tieuViem.length, 1);
   assert.equal(tieuViem[0].degree, 2);
 });
+
+test('extractCapitalizedTerms: nhận diện đầy đủ chữ hoa tiếng Việt Ă, Ế, Ơ, Ư', () => {
+  const sampleText = `
+    Ưng Vô Nhai xuất hiện cùng Ếch Ngồi Đáy Giếng tại Ơn Nghĩa Sơn.
+    Sau đó, Ưng Vô Nhai lại đến Ơn Nghĩa Sơn để gặp lại người xưa.
+    Ếch Ngồi Đáy Giếng cũng đã xuất hiện lần hai tại hội nghị.
+  `;
+  const result = extractCapitalizedTerms(sampleText);
+  assert.ok(result.names.includes('Ưng Vô Nhai'), 'Phải trích xuất được tên bắt đầu bằng Ư');
+  assert.ok(result.names.includes('Ếch Ngồi Đáy Giếng'), 'Phải trích xuất được tên bắt đầu bằng Ế');
+  assert.ok(result.locations.includes('Ơn Nghĩa Sơn'), 'Phải trích xuất được địa danh bắt đầu bằng Ơ');
+});
+
+test('story_extract_entities_to_bible: sanitize tên file an toàn khi entity chứa ký tự đặc biệt', async () => {
+  const p = await makeProject();
+  await fs.mkdir(path.join(p.manuscriptDir, 'arc_01'), { recursive: true });
+  await fs.writeFile(
+    path.join(p.manuscriptDir, 'arc_01', 'ch_001.md'),
+    'Kiếm Khách Lãng Tử xuất hiện. Kiếm Khách Lãng Tử rút kiếm.',
+    'utf-8'
+  );
+
+  const server = new McpServer({ name: 'test', version: '1.0' });
+  registerExtractEntitiesTool(server, () => p);
+  const tools = (server as any)._registeredTools || (server as any).tools;
+  const handler = tools['story_extract_entities_to_bible'].handler;
+
+  const res = await handler({ arc: 'arc_01', chapter: 'ch_001', confirm: true });
+  assert.equal(res.isError, undefined);
+  assert.ok(res.content[0].text.includes('Đã tạo các thực thể mới vào Bible thành công'));
+  assert.ok(res.content[0].text.includes('Nhân vật mới đã tạo: 1'));
+
+  // Kiểm tra file được tạo trong bible/characters với tên an toàn
+  const createdFile = path.join(p.bibleDir, 'characters', 'kiếm_khách_lãng_tử.md');
+  const fileExists = await fs.access(createdFile).then(() => true).catch(() => false);
+  assert.ok(fileExists, 'File entity được tạo đúng tên an toàn');
+});
+
+test('buildAdjacency & findShortestPath: giữ đúng góc nhìn quan hệ 2 chiều khác type', async () => {
+  const p = await makeProject();
+  await fs.writeFile(path.join(p.projectPath, '.story', 'relationships.json'), JSON.stringify({
+    relationships: [
+      { source: 'Tiêu Viêm', target: 'Na Lan', type: 'rival', description: 'Coi là kình địch' },
+      { source: 'Na Lan', target: 'Tiêu Viêm', type: 'lover', description: 'Thầm ngưỡng mộ' },
+    ],
+    updatedAt: new Date().toISOString(),
+  }));
+
+  const index = await buildIndex(p);
+  const pathAtoB = findShortestPath(index, 'Tiêu Viêm', 'Na Lan');
+  assert.ok(pathAtoB);
+  assert.equal(pathAtoB.edges[0].source, 'Tiêu Viêm');
+  assert.equal(pathAtoB.edges[0].type, 'rival');
+
+  const pathBtoA = findShortestPath(index, 'Na Lan', 'Tiêu Viêm');
+  assert.ok(pathBtoA);
+  assert.equal(pathBtoA.edges[0].source, 'Na Lan');
+  assert.equal(pathBtoA.edges[0].type, 'lover');
+});
+
+

@@ -54,9 +54,9 @@ export function registerAnalyzeVoiceTool(server: McpServer, getProject: () => St
         totalAvgSentenceLength += avgLen;
         chapterCount++;
 
-        // Detect POV indicators
-        const firstPersonMatches = (content.match(/\b(tôi|ta|mình|bản thân tôi)\b/gi) || []).length;
-        const thirdPersonMatches = (content.match(/\b(hắn|nàng|cậu|anh|ông|bà)\b/gi) || []).length;
+        // Detect POV indicators (use Unicode boundary to properly support Vietnamese accents like 'ông', 'bà')
+        const firstPersonMatches = (content.match(/(?:^|[^\p{L}\p{N}])(tôi|ta|mình|bản thân tôi)(?=[^\p{L}\p{N}]|$)/gui) || []).length;
+        const thirdPersonMatches = (content.match(/(?:^|[^\p{L}\p{N}])(hắn|nàng|cậu|anh|ông|bà)(?=[^\p{L}\p{N}]|$)/gui) || []).length;
         const detectedPOV = firstPersonMatches > thirdPersonMatches ? 'Ngôi thứ nhất (First person)' : 'Ngôi thứ ba (Third person)';
 
         // Detect avoid words

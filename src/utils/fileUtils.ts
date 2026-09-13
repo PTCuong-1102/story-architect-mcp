@@ -160,6 +160,22 @@ export function isBlockedScanPath(resolvedPath: string): boolean {
 }
 
 /**
+ * Kiểm tra xem đường dẫn ghi file đầu ra (export, dashboard) có an toàn không:
+ * - Không trỏ vào thư mục hệ thống (dùng isBlockedScanPath)
+ * - Không trỏ vào thư mục nội bộ nhạy cảm (.git, .story)
+ */
+export function isSafeWritePath(targetPath: string): boolean {
+  const resolved = path.resolve(targetPath);
+  if (isBlockedScanPath(resolved)) return false;
+  const norm = resolved.replace(/\\/g, '/');
+  const segments = norm.split('/');
+  if (segments.some(seg => seg === '.git' || seg === '.story')) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Kiểm tra file/thư mục có tồn tại không.
  */
 export async function exists(p: string): Promise<boolean> {

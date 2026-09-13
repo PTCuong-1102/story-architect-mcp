@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { StoryProject } from '../../server/StoryProject.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 import { computeGodNodes } from '../../utils/knowledgeGraph.js';
+import { countWords } from '../../utils/wordCount.js';
 
 export function registerStatsTool(server: McpServer, getProject: () => StoryProject): void {
   server.registerTool(
@@ -37,7 +38,6 @@ export function registerStatsTool(server: McpServer, getProject: () => StoryProj
 
         for (const ch of chapters) {
           const content = await project.getChapterContent(arc, ch);
-          const { countWords } = await import('../../utils/wordCount.js');
           const words = content ? countWords(content) : 0;
           arcWordCount += words;
           chapterDetails.push(`    ${ch}: ${words.toLocaleString()} từ`);

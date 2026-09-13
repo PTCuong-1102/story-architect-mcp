@@ -223,6 +223,44 @@ function buildAdjacency(index: KnowledgeGraphIndex): Adjacency {
   const ensure = (key: string, display: string) => {
     if (!adj.has(key)) adj.set(key, { displayName: display, neighbors: new Map() });
   };
+
+  const setNeighbor = (fromKey: string, toKey: string, e: RelatedEdge) => {
+    const nodeNeighbors = adj.get(fromKey)!.neighbors;
+    const existing = nodeNeighbors.get(toKey);
+    if (!existing) {
+      nodeNeighbors.set(toKey, { ...e });
+      return;
+    }
+
+    const isCurrentFromSource = normalize(e.source) === fromKey;
+    const isExistingFromSource = normalize(existing.source) === fromKey;
+
+    if (isCurrentFromSource && !isExistingFromSource) {
+      // Cạnh mới đúng chiều xuất phát từ fromKey, thay thế cạnh ngược chiều
+      nodeNeighbors.set(toKey, { ...e });
+    } else if (isCurrentFromSource && isExistingFromSource) {
+      // Cả hai cùng xuất phát từ fromKey nhưng khác mối quan hệ -> gộp thông tin
+      if (!existing.type.includes(e.type)) {
+        existing.type = `${existing.type}, ${e.type}`;
+      }
+      if (e.description && !existing.description.includes(e.description)) {
+        existing.description = existing.description
+          ? `${existing.description}; ${e.description}`
+          : e.description;
+      }
+    } else if (!isCurrentFromSource && !isExistingFromSource) {
+      // Cả hai đều là cạnh ngược chiều -> gộp type nếu khác
+      if (!existing.type.includes(e.type)) {
+        existing.type = `${existing.type}, ${e.type}`;
+      }
+      if (e.description && !existing.description.includes(e.description)) {
+        existing.description = existing.description
+          ? `${existing.description}; ${e.description}`
+          : e.description;
+      }
+    }
+  };
+
   for (const r of index.relationships) {
     const a = normalize(r.source);
     const b = normalize(r.target);
@@ -234,8 +272,8 @@ function buildAdjacency(index: KnowledgeGraphIndex): Adjacency {
       type: r.type, description: r.description,
       provenance: r.provenance,
     };
-    adj.get(a)!.neighbors.set(b, edge);
-    adj.get(b)!.neighbors.set(a, edge);
+    setNeighbor(a, b, edge);
+    setNeighbor(b, a, edge);
   }
   return adj;
 }

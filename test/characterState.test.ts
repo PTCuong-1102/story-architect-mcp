@@ -73,6 +73,43 @@ test('character state tools', async (t) => {
     assert.ok(resHistory.content[0].text.includes('injured'));
   });
 
+  await t.test('query: lọc đúng theo params.chapter được yêu cầu', async () => {
+    // 1. Query chính xác chương cũ (ch_001) trong khi đã có ch_005
+    const resExactOld = await handler({
+      character: 'Tiêu Viêm',
+      chapter: 'arc_01/ch_001',
+      action: 'query',
+    });
+    assert.equal(resExactOld.isError, undefined);
+    assert.ok(resExactOld.content[0].text.includes('Ô Thản Thành - Gia Tộc'));
+    assert.ok(!resExactOld.content[0].text.includes('Ma Thú Sơn Mạch'));
+
+    // 2. Query chương ở giữa chưa log (ch_003) -> lấy mốc gần nhất trước đó (ch_001)
+    const resPrior = await handler({
+      character: 'Tiêu Viêm',
+      chapter: 'arc_01/ch_003',
+      action: 'query',
+    });
+    assert.equal(resPrior.isError, undefined);
+    assert.ok(resPrior.content[0].text.includes('Ô Thản Thành - Gia Tộc'));
+    assert.ok(resPrior.content[0].text.includes('tính đến arc_01/ch_003 (mốc gần nhất tại arc_01/ch_001)'));
+
+    // 3. Query chương trước bất kỳ mốc nào -> thông báo không tìm thấy
+    const resNotFound = await handler({
+      character: 'Tiêu Viêm',
+      chapter: 'arc_00/ch_000',
+      action: 'query',
+    });
+    assert.ok(resNotFound.content[0].text.includes('Không tìm thấy trạng thái nào'));
+
+    // 4. Query không truyền chapter -> vẫn lấy mốc mới nhất (ch_005)
+    const resLatest = await handler({
+      character: 'Tiêu Viêm',
+      action: 'query',
+    });
+    assert.ok(resLatest.content[0].text.includes('Ma Thú Sơn Mạch'));
+  });
+
   // Cleanup
   await fs.rm(tmpDir, { recursive: true, force: true });
 });

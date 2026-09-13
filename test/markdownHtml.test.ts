@@ -9,8 +9,10 @@ test('markdownToHtml: heading và đoạn văn', () => {
 });
 
 test('markdownToHtml: inline bold/italic/code/link', () => {
-  const html = markdownToHtml('Chữ **đậm** và _nghiêng_ với `code` và [link](https://x.com).');
-  assert.ok(html.includes('<strong>đậm</strong>'));
+  const html = markdownToHtml('Chữ **đậm sao** và __đậm gạch dưới__ và _nghiêng_ với `code` và [link](https://x.com).');
+  assert.ok(html.includes('<strong>đậm sao</strong>'));
+  assert.ok(html.includes('<strong>đậm gạch dưới</strong>'));
+  assert.ok(!html.includes('<strong>đậm gạch dưới</strong>_'), 'Không được để thừa ký tự gạch dưới ở đuôi thẻ đóng');
   assert.ok(html.includes('<em>nghiêng</em>'));
   assert.ok(html.includes('<code>code</code>'));
   assert.ok(html.includes('<a href="https://x.com">link</a>'));

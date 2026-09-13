@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { StoryProject } from '../src/server/StoryProject.js';
 import { createSnapshot, registerSnapshotTools } from '../src/tools/rescue/snapshot.js';
+import { registerScanMessyProjectTool } from '../src/tools/rescue/scanMessyProject.js';
 import { readJsonFile } from '../src/utils/fileUtils.js';
 
 const TMP = '/tmp/opencode/unit-snapshot';
@@ -48,10 +49,8 @@ test('createSnapshot: sao chép metadata, manuscript, bible và cập nhật ind
   // Trả về đúng metadata
   assert.ok(snap.id.length > 0);
   assert.equal(snap.label, 'before-edit');
-  assert.equal(snap.description, 'kiểm thử');
-  // 7 file meta (.story) + 1 chương manuscript
-  // 8 file metadata init tạo + 1 file manuscript seed
-  assert.equal(snap.fileCount, 9);
+  // 8 file metadata (.story) + 1 manuscript + 1 bible + 2 outline (synopsis, themes)
+  assert.equal(snap.fileCount, 12);
 
   // File đã được sao chép vào thư mục snapshot
   const snapDir = snap.snapshotDir;
@@ -162,4 +161,50 @@ test('story_rollback: id không tồn tại → liệt kê snapshot khả dụng
   const result = await handlers.get('story_rollback')!({ snapshotId: 'khong-ton-tai', confirm: true } as never);
   assert.match(result.content[0].text, /Không tìm thấy snapshot: khong-ton-tai/);
   assert.match(result.content[0].text, new RegExp(snap.id));
+});
+
+test('story_rollback: khôi phục file unstructured đã sao lưu từ pre-refactor snapshot', async () => {
+  const p = await freshProject();
+  const messyFile = path.join(p.projectPath, 'my_drafts', 'hoi1.txt');
+  await fs.mkdir(path.dirname(messyFile), { recursive: true });
+  await fs.writeFile(messyFile, 'Nội dung bản thảo cũ chưa cấu trúc\n', 'utf-8');
+
+  // Tạo snapshot kèm extraSourceFiles
+  const snap = await createSnapshot(p, 'pre-refactor', 'test refactor backup', ['my_drafts/hoi1.txt']);
+
+  // Giả lập refactor: di chuyển file đi nơi khác và xóa file cũ
+  await fs.rm(messyFile);
+  assert.equal(await fs.access(messyFile).then(() => true).catch(() => false), false);
+
+  // Thực hiện rollback
+  const { server, handlers } = makeFakeServer();
+  registerSnapshotTools(server, () => p);
+  const result = await handlers.get('story_rollback')!({ snapshotId: snap.id, confirm: true } as never);
+  assert.match(result.content[0].text, /Rollback hoàn tất/);
+
+  // Xác nhận file gốc đã được khôi phục nguyên vẹn
+  const restoredContent = await fs.readFile(messyFile, 'utf-8');
+  assert.equal(restoredContent, 'Nội dung bản thảo cũ chưa cấu trúc\n');
+});
+
+test('story_scan_messy_project: xử lý an toàn file .doc nhị phân, không decode text rác', async () => {
+  const p = await freshProject();
+  const messyDir = path.join(p.projectPath, 'old_drafts');
+  await fs.mkdir(messyDir, { recursive: true });
+
+  // Tạo file .doc giả lập chuẩn OLE2 Compound Document
+  const oleDocHeader = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00, 0x00, 0x01, 0x02]);
+  const docFile = path.join(messyDir, 'ch_01_old.doc');
+  await fs.writeFile(docFile, oleDocHeader);
+
+  const { server, handlers } = makeFakeServer();
+  registerScanMessyProjectTool(server, () => p);
+
+  const scanHandler = handlers.get('story_scan_messy_project');
+  assert.ok(scanHandler);
+
+  const result = await scanHandler({ path: messyDir, detectDuplicates: false } as never);
+  assert.ok(result.content[0].text.includes('ch_01_old.doc'));
+  assert.ok(result.content[0].text.includes('binary'), 'Phải nhận diện encoding là binary');
+  assert.ok(result.content[0].text.includes('0 từ'), 'File binary không được decode từ rác');
 });

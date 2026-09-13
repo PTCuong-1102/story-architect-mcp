@@ -41,7 +41,7 @@ function renderInline(raw: string): string {
   r = r.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (_m, text: string, href: string) =>
     isSafeUrl(href) ? `<a href="${href}">${text}</a>` : text);
   r = r.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  r = r.replace(/__([^_]+)_/g, '<strong>$1</strong>');
+  r = r.replace(/__([^_]+)__/g, '<strong>$1</strong>');
   r = r.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
   r = r.replace(/(^|[^_])_([^_\n]+)_/g, '$1<em>$2</em>');
   // Khôi phục code-span

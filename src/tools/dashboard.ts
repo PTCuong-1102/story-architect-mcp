@@ -6,6 +6,7 @@ import { StoryProject } from '../server/StoryProject.js';
 import { errResult, requireProject, isToolError } from '../utils/mcpResults.js';
 import { computeGodNodes } from '../utils/knowledgeGraph.js';
 import { escapeHtml } from '../utils/markdownToHtml.js';
+import { isSafeWritePath } from '../utils/fileUtils.js';
 
 /**
  * Sinh dashboard HTML. Mọi dữ liệu người dùng đều qua escapeHtml
@@ -212,7 +213,13 @@ export function registerDashboardTool(server: McpServer, getProject: () => Story
       const exportDir = path.join(project.projectPath, 'export');
       await fs.mkdir(exportDir, { recursive: true });
 
-      const targetPath = params.outputPath || path.join(exportDir, 'dashboard.html');
+      const targetPath = params.outputPath
+        ? path.resolve(params.outputPath)
+        : path.join(exportDir, 'dashboard.html');
+
+      if (!isSafeWritePath(targetPath)) {
+        return errResult(`❌ Đường dẫn xuất dashboard không an toàn hoặc nằm trong thư mục cấm: ${targetPath}`);
+      }
       const htmlContent = generateDashboardHtml(
         config.name,
         config.author,
