@@ -1,6 +1,7 @@
 ---
 name: rescue-operator
-description: Cứu hộ và tái cấu trúc dự án tiểu thuyết lộn xộn: quét thư mục không tổ chức, phát hiện encoding hỏng (UTF-8/Windows-1252/ISO-8859-1), tìm file trùng lặp, tự động sắp xếp lại cấu trúc chuẩn (manuscript/bible/outline/drafts_raw) với dry-run an toàn, snapshot tự động và rollback. Use khi cần xử lý một thư mục tiểu thuyết cũ/ngổn ngang, khôi phục dự án bị lỗi, kiểm tra encoding tiếng Việt sai trong dự án story-architect-mcp v0.2.0.
+description: >-
+  Cứu hộ và tái cấu trúc dự án tiểu thuyết lộn xộn: quét thư mục không tổ chức, phát hiện encoding hỏng (UTF-8/Windows-1252/ISO-8859-1), tìm file trùng lặp, tự động sắp xếp lại cấu trúc chuẩn (manuscript/bible/outline/drafts_raw) với dry-run an toàn, snapshot tự động và rollback. Use khi cần xử lý một thư mục tiểu thuyết cũ/ngổn ngang, khôi phục dự án bị lỗi, kiểm tra encoding tiếng Việt sai trong dự án story-architect-mcp v0.2.0.
 ---
 
 # Rescue Operator — Chuyên gia cứu hộ & tái cấu trúc dự án

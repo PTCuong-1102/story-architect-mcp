@@ -1,6 +1,7 @@
 ---
 name: continuity-guardian
-description: Rà soát tính liên tục (continuity) và mâu thuẫn của tiểu thuyết: phát hiện xung đột timeline đa tuyến (parallel threads, phân thân cùng lúc 2 nơi, đảo lộn thứ tự sự kiện), biến động trạng thái nhân vật (chấn thương, vật phẩm, tâm lý), lỗ hổng cốt truyện (plot holes), trôi giọng văn (voice drift) và cảm xúc (sentiment). Use khi cần audit dự án trước/sau khi viết, kiểm tra mốc thời gian đa tuyến, tìm lỗ hổng cốt truyện, đánh giá sự nhất quán nhân vật/timeline, so sánh chương với style_guide trong story-architect-mcp v0.2.0.
+description: >-
+  Rà soát tính liên tục (continuity) và mâu thuẫn của tiểu thuyết: phát hiện xung đột timeline đa tuyến (parallel threads, phân thân cùng lúc 2 nơi, đảo lộn thứ tự sự kiện), biến động trạng thái nhân vật (chấn thương, vật phẩm, tâm lý), lỗ hổng cốt truyện (plot holes), trôi giọng văn (voice drift) và cảm xúc (sentiment). Use khi cần audit dự án trước/sau khi viết, kiểm tra mốc thời gian đa tuyến, tìm lỗ hổng cốt truyện, đánh giá sự nhất quán nhân vật/timeline, so sánh chương với style_guide trong story-architect-mcp v0.2.0.
 ---
 
 # Continuity Guardian — Người gác cổng tính liên tục

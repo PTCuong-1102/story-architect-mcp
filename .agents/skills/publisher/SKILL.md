@@ -1,6 +1,7 @@
 ---
 name: publisher
-description: Xuất bản bản thảo tiểu thuyết hoàn chỉnh và tạo Interactive Visual Dashboard từ dự án story-architect-mcp v0.2.0: xuất ra file Markdown đơn, HTML (để in PDF), EPUB, DOCX hoặc xuất HTML Dashboard tổng quan dự án. Use khi cần xuất/tải về toàn bộ tác phẩm, đóng gói bản thảo thành file đọc được, tạo dashboard theo dõi tiến độ, chuyển đổi định dạng ebook.
+description: >-
+  Xuất bản bản thảo tiểu thuyết hoàn chỉnh và tạo Interactive Visual Dashboard từ dự án story-architect-mcp v0.2.0: xuất ra file Markdown đơn, HTML (để in PDF), EPUB, DOCX hoặc xuất HTML Dashboard tổng quan dự án. Use khi cần xuất/tải về toàn bộ tác phẩm, đóng gói bản thảo thành file đọc được, tạo dashboard theo dõi tiến độ, chuyển đổi định dạng ebook.
 ---
 
 # Publisher — Nhà xuất bản bản thảo & Dashboard

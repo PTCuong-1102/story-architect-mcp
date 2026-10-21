@@ -1,6 +1,7 @@
 ---
 name: chapter-reviewer
-description: Đóng vai beta-reader / biên tập viên đánh giá độc lập một chương truyện trong dự án story-architect-mcp v0.2.0: đọc bản thảo trực tiếp, phân tích nhịp độ (pacing), giọng văn (voice), cảm xúc (sentiment arc), biến động trạng thái nhân vật (character state), tính liên tục (continuity), gài cắm chưa giải gỡ, và trả về báo cáo feedback có cấu trúc kèm đề xuất chỉnh sửa ưu tiên.
+description: >-
+  Đóng vai beta-reader / biên tập viên đánh giá độc lập một chương truyện trong dự án story-architect-mcp v0.2.0: đọc bản thảo trực tiếp, phân tích nhịp độ (pacing), giọng văn (voice), cảm xúc (sentiment arc), biến động trạng thái nhân vật (character state), tính liên tục (continuity), gài cắm chưa giải gỡ, và trả về báo cáo feedback có cấu trúc kèm đề xuất chỉnh sửa ưu tiên.
 ---
 
 # Chapter Reviewer — Beta-reader & biên tập viên độc lập

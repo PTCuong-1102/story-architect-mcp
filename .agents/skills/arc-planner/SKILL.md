@@ -1,6 +1,7 @@
 ---
 name: arc-planner
-description: Lập kế hoạch Arc & nhịp độ truyện (story arc planning & pacing): thiết kế cấu trúc arc, phân chia phân cảnh (scenes), đặt mục tiêu tỷ lệ Action/Dialogue/Description, kiểm soát đường cong căng thẳng (tension curve), chuẩn bị dàn ý và soạn thảo phân cảnh trực tiếp, xuất Visual Dashboard. Use khi cần lên kế hoạch một arc mới, thiết kế scene structure, đánh giá nhịp độ một arc/chương, phân phối hành động-hội thoại-mô tả trong dự án story-architect-mcp v0.2.0.
+description: >-
+  Lập kế hoạch Arc & nhịp độ truyện (story arc planning & pacing): thiết kế cấu trúc arc, phân chia phân cảnh (scenes), đặt mục tiêu tỷ lệ Action/Dialogue/Description, kiểm soát đường cong căng thẳng (tension curve), chuẩn bị dàn ý và soạn thảo phân cảnh trực tiếp, xuất Visual Dashboard. Use khi cần lên kế hoạch một arc mới, thiết kế scene structure, đánh giá nhịp độ một arc/chương, phân phối hành động-hội thoại-mô tả trong dự án story-architect-mcp v0.2.0.
 ---
 
 # Arc Planner — Kiến trúc sư cốt truyện & nhịp độ

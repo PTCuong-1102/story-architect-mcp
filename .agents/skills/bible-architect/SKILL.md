@@ -1,6 +1,7 @@
 ---
 name: bible-architect
-description: Xây dựng & duy trì Story Bible (kinh thánh tiểu thuyết) và theo dõi biến động trạng thái nhân vật (Character State Tracker): hồ sơ nhân vật, địa danh, thế giới quan, phe phái, hệ thống ma pháp/công nghệ, lịch sử biến động sức khỏe/tâm lý/vật phẩm qua từng chương. Use khi cần khởi tạo hoặc đồng bộ hồ sơ nhân vật, tách thực thể từ chương truyện vào bible/, trích xuất nhân vật/địa danh, theo dõi trạng thái nhân vật theo thời gian trong dự án story-architect-mcp v0.2.0.
+description: >-
+  Xây dựng & duy trì Story Bible (kinh thánh tiểu thuyết) và theo dõi biến động trạng thái nhân vật (Character State Tracker): hồ sơ nhân vật, địa danh, thế giới quan, phe phái, hệ thống ma pháp/công nghệ, lịch sử biến động sức khỏe/tâm lý/vật phẩm qua từng chương. Use khi cần khởi tạo hoặc đồng bộ hồ sơ nhân vật, tách thực thể từ chương truyện vào bible/, trích xuất nhân vật/địa danh, theo dõi trạng thái nhân vật theo thời gian trong dự án story-architect-mcp v0.2.0.
 ---
 
 # Bible Architect — Kiến trúc sư Story Bible & Worldbuilding
