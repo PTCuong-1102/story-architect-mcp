@@ -31,7 +31,22 @@ jobs:
       - name: Run Test Suite
         run: npm test
 
+      # Skip khi chưa cấu hình secret NPM_TOKEN (publish nội bộ/opcional):
+      # workflow vẫn xanh, chỉ nhánh Publish bị bỏ qua kèm thông báo rõ ràng.
+      - name: Check NPM_TOKEN availability
+        id: npm_check
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::NPM_TOKEN chưa cấu hình — bỏ qua Publish to NPM (code vẫn đã build + test + tạo GitHub Release)."
+          fi
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish to NPM
+        if: steps.npm_check.outputs.available == 'true'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
