@@ -85,7 +85,7 @@ async function main() {
   }
 
   const tl = await request('tools/list', {});
-  report('tools/list (stdio)', (tl.result?.tools || []).length === 29 ? 'PASS' : 'FAIL', `${(tl.result?.tools || []).length} tools (kỳ vọng 29)`);
+  report('tools/list (stdio)', (tl.result?.tools || []).length === 30 ? 'PASS' : 'FAIL', `${(tl.result?.tools || []).length} tools (kỳ vọng 30)`);
 
   // ─── Luồng zero-config chuẩn README ───
   await call('set_project (thư mục rỗng)', 'story_set_project', { projectPath: novelDir });

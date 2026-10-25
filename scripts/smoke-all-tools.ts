@@ -1,6 +1,6 @@
 /**
  * Smoke test MCP surface (21 tools trong subset đăng ký ở script này —
- * server thật có 29 tools (v0.3.0: thêm story_list_projects), xem smoke-stdio.ts —
+ * server thật có 30 tools (v0.5.0), xem smoke-stdio.ts —
  * + 8 resources + 4 templates + 5 prompts)
  * qua InMemoryTransport THẬT của SDK — tái hiện đúng đường đi của client thực.
  */
