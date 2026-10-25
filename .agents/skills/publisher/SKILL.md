@@ -1,12 +1,12 @@
 ---
 name: publisher
 description: >-
-  Xuất bản bản thảo tiểu thuyết hoàn chỉnh và tạo Interactive Visual Dashboard từ dự án story-architect-mcp v0.3.0: xuất ra file Markdown đơn, HTML (để in PDF), EPUB, DOCX hoặc xuất HTML Dashboard tổng quan dự án. Use khi cần xuất/tải về toàn bộ tác phẩm, đóng gói bản thảo thành file đọc được, tạo dashboard theo dõi tiến độ, chuyển đổi định dạng ebook.
+  Xuất bản bản thảo tiểu thuyết hoàn chỉnh và tạo Interactive Visual Dashboard từ dự án story-architect-mcp v0.4.0: xuất ra file Markdown đơn, HTML (để in PDF), EPUB, DOCX hoặc xuất HTML Dashboard tổng quan dự án. Use khi cần xuất/tải về toàn bộ tác phẩm, đóng gói bản thảo thành file đọc được, tạo dashboard theo dõi tiến độ, chuyển đổi định dạng ebook.
 ---
 
 # Publisher — Nhà xuất bản bản thảo & Dashboard
 
-Kỹ năng này biến AI thành **Nhà xuất bản & Báo cáo viên dự án** chuyên nghiệp: đóng gói toàn bộ bản thảo tiểu thuyết trong dự án `story-architect-mcp v0.3.0` thành các định dạng phổ biến (Markdown, HTML, EPUB, DOCX) kèm mục lục và thông tin tác giả; đồng thời tạo Visual HTML Dashboard tương tác đầy đủ để theo dõi tổng thể dự án.
+Kỹ năng này biến AI thành **Nhà xuất bản & Báo cáo viên dự án** chuyên nghiệp: đóng gói toàn bộ bản thảo tiểu thuyết trong dự án `story-architect-mcp v0.4.0` thành các định dạng phổ biến (Markdown, HTML, EPUB, DOCX) kèm mục lục và thông tin tác giả; đồng thời tạo Visual HTML Dashboard tương tác đầy đủ để theo dõi tổng thể dự án.
 
 ---
 
@@ -18,8 +18,8 @@ Kỹ năng này biến AI thành **Nhà xuất bản & Báo cáo viên dự án*
 2. **CHỌN ĐÚNG ĐỊNH DẠNG (Right format per purpose):**
    - **`markdown_single`** — bản thảo gốc gom gọn 1 file Markdown duy nhất, tiện diff/lưu trữ git.
    - **`html`** — giao diện web đẹp + là đường xuất PDF chuẩn (Trình duyệt: In → Save as PDF).
-   - **`epub`** — sách điện tử chuẩn quốc tế (Kindle/Apple Books/Google Play Books). v0.3.0: metadata `dcterms:modified`, CSS justify/hyphens và ngắt trang giữa các section → mở trên e-reader cho text căn đều đúng chuẩn typography.
-   - **`docx`** — file Word hoàn chỉnh để gửi nhà xuất bản hoặc biên tập viên bên ngoài. v0.3.0: page break giữa các chương, docProps (core/app) đầy đủ, style Normal căn đều Times New Roman.
+   - **`epub`** — sách điện tử chuẩn quốc tế (Kindle/Apple Books/Google Play Books). v0.3.0: metadata `dcterms:modified`, CSS justify/hyphens và ngắt trang giữa các section → mở trên e-reader cho text căn đều đúng chuẩn typography. v0.4.0: tự sinh **bìa SVG** từ metadata (tên truyện/tác giả/thể loại) — mở trên e-reader thấy bìa thật, không cần ảnh.
+   - **`docx`** — file Word hoàn chỉnh để gửi nhà xuất bản hoặc biên tập viên bên ngoài. v0.3.0: page break giữa các chương, docProps (core/app) đầy đủ, style Normal căn đều Times New Roman. v0.4.0: **mục lục Word field thật** (mở file → F9 → sinh tự động) + `outlineLvl` — chương hiện trong Navigation Pane của Word.
    - **`story_generate_dashboard`** — Báo cáo tổng quan dự án (tiến độ từ, radar cảm xúc, Chekhov guns, quan hệ nhân vật).
 
 3. **KÈM MỤC LỤC & DÀN Ý (TOC & outline included):**

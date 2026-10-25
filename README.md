@@ -12,12 +12,20 @@
 
 ---
 
+## 🆕 What's New in v0.4.0
+
+* **Auto-Stale Index**: The knowledge graph cache (`.cbm/index.json`) now carries a stat fingerprint of its sources; editing bible files outside the tools (by hand, in another editor) is detected automatically — no more manual `rebuildIndex` calls.
+* **State History Diff**: `story_track_character_state` `action: "history"` now shows what changed between consecutive milestones — inventory lost/acquired (`−🎒/+🎒`), secrets learned (`+🗝️`), status/condition/location changes — directly in the report.
+* **Sentiment `lexicon-v3`**: unaccented negators/intensifiers ("khong vui", "rat vui", "vo cung") now match exactly — unaccented prose no longer gets muted polarity. (Method label is transparent.)
+* **Cross-Process Lock Regression Test**: the on-disk lock layer is now protected by a 4-process × 10-RMW contention test (148 unit tests total).
+* **EPUB Cover + DOCX TOC**: exports gain an SVG title cover (metadata-driven, zero-dep) and a real Word TOC field with outline levels for the Navigation pane.
+
 ## 🆕 What's New in v0.3.0
 
 * **Atomic Writes + Advisory File Locking**: Every `.story/*.json` state file is written atomically (temp-file + rename — readers never see a half-written file), and all read-modify-write operations are serialized through a two-layer lock (in-process mutex + on-disk lock dir with stale-TTL and fail-fast timeout). Safe for multiple MCP clients writing to the same novel.
 * **Project Registry & `story_list_projects`**: Server now reuses `StoryProject` instances across switches, and a new tool lists every project opened in the session.
 * **Diacritics-insensitive + Fuzzy Graph Matching**: Character/relationship lookups normalize Vietnamese diacritics (`Trăng` ≡ `trang`) and fall back to Levenshtein fuzzy match (±1–2 characters) — queries mistyped by the LLM still resolve.
-* **Transparent Lexical Analysis**: `story_analyze_sentiment` now reports its method (`lexicon-v2`) and warns when coverage is too low to trust metaphorical/ironic readings.
+* **Transparent Lexical Analysis**: `story_analyze_sentiment` now reports its method (`lexicon-v3`) and warns when coverage is too low to trust metaphorical/ironic readings.
 * **Richer EPUB/DOCX Export**: EPUB3 gains `dcterms:modified`, richer CSS (justified text, hyphenation, per-section page breaks); DOCX gains page breaks between chapters, justified Normal style, full `docProps` (creator, language, app info), and Times New Roman typography.
 
 ---

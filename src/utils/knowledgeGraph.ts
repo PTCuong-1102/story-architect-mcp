@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import matter from 'gray-matter';
 import { StoryProject } from '../server/StoryProject.js';
-import { writeJsonFile, readTextFile } from './fileUtils.js';
+import { writeJsonFile, readTextFile, walkDir, computePathsFingerprint } from './fileUtils.js';
 
 // ============================================================
 // Knowledge Graph nội bộ (mô phỏng tích hợp codebase-memory-mcp)
@@ -43,6 +43,12 @@ export interface KnowledgeGraphIndex {
   relationships: GraphRelationshipEdge[];
   timelineEvents: { label: string; description: string }[];
   builtAt: string;
+  /**
+   * v0.4.0: fingerprint stat của nguồn dữ liệu khi build (bible, relationships,
+   * timeline). loadOrBuildIndex so khớp fingerprint trước khi tin cache —
+   * file bị sửa từ ngoài editor không cần gọi rebuildIndex thủ công nữa.
+   */
+  sourceFingerprint?: string;
 }
 
 const STOPWORDS = new Set([
@@ -165,8 +171,24 @@ export function buildIndex(project: StoryProject): Promise<KnowledgeGraphIndex> 
       })),
       timelineEvents: timeline.events.map(e => ({ label: e.label, description: e.description })),
       builtAt: new Date().toISOString(),
+      sourceFingerprint: await computeSourceFingerprint(project),
     };
   })();
+}
+
+/**
+ * v0.4.0 — Fingerprint các nguồn dữ liệu của graph: mọi file .md trong bible/
+ * (characters + world + subplots), relationships.json, timeline.json.
+ * File thay đổi ngoài tool (sửa tay, editor) đổi mtime → fingerprint lệch →
+ * cache bị coi là cũ ngay ở lần query kế.
+ */
+export async function computeSourceFingerprint(project: StoryProject): Promise<string> {
+  const bibleFiles = await walkDir(project.bibleDir, ['.md']);
+  const stateFiles = [
+    path.join(project.projectPath, '.story', 'relationships.json'),
+    path.join(project.projectPath, '.story', 'timeline.json'),
+  ];
+  return computePathsFingerprint([...bibleFiles, ...stateFiles]);
 }
 
 /**
@@ -182,15 +204,31 @@ export async function invalidateIndex(project: StoryProject): Promise<void> {
   }
 }
 
-/** Đọc cache .cbm/index.json nếu có, ngược lại build mới và ghi cache. */
+/**
+ * Đọc cache .cbm/index.json nếu còn "tươi" (fingerprint nguồn khớp),
+ * ngược lại build mới và ghi cache.
+ *
+ * v0.4.0: cache thiếu `sourceFingerprint` (dữ liệu cũ từ < 0.4.0) luôn bị
+ * coi cũ → rebuild một lần rồi cache mới có fingerprint. Result khi
+ * forceRebuild=true cũng như fingerprint lệch (bible/state bị sửa từ ngoài).
+ */
 export async function loadOrBuildIndex(project: StoryProject, forceRebuild = false): Promise<KnowledgeGraphIndex> {
   if (!forceRebuild) {
     const cachePath = path.join(project.projectPath, '.cbm', 'index.json');
+    let cached: KnowledgeGraphIndex | null = null;
     try {
       const raw = await fs.readFile(cachePath, 'utf-8');
-      return JSON.parse(raw) as KnowledgeGraphIndex;
+      cached = JSON.parse(raw) as KnowledgeGraphIndex;
     } catch {
       // cache không tồn tại hoặc hỏng → build mới
+    }
+
+    // Cache chỉ được tin khi fingerprint nguồn khớp tình trạng hiện tại
+    if (cached && cached.sourceFingerprint) {
+      if (cached.sourceFingerprint === await computeSourceFingerprint(project)) {
+        return cached;
+      }
+      // fingerprint lệch (bible/state bị sửa từ ngoài) → rơi xuống build mới
     }
   }
 

@@ -42,7 +42,7 @@ async function handleCliOrServer() {
     return;
   }
   if (subCommand === '--version' || subCommand === '-v' || subCommand === 'version') {
-    console.log('story-architect-mcp v0.3.0');
+    console.log('story-architect-mcp v0.4.0');
     return;
   }
 
@@ -177,7 +177,7 @@ async function startMcpServer() {
 
   const server = new McpServer({
     name: 'story-architect-mcp',
-    version: '0.3.0',
+    version: '0.4.0',
   });
 
   // ─── Register Resources ───

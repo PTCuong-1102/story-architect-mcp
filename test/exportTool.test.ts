@@ -118,9 +118,19 @@ test('story_export: epub là ZIP hợp lệ, mimetype STORED đứng đầu, đ�
   assert.equal(entries[0].data.toString(), 'application/epub+zip');
 
   const names = entries.map(e => e.name);
-  for (const required of ['META-INF/container.xml', 'OEBPS/content.opf', 'OEBPS/nav.xhtml', 'OEBPS/style.css', 'OEBPS/content.xhtml']) {
+  for (const required of ['META-INF/container.xml', 'OEBPS/content.opf', 'OEBPS/nav.xhtml', 'OEBPS/style.css', 'OEBPS/content.xhtml', 'OEBPS/cover.xhtml']) {
     assert.ok(names.includes(required), `thiếu entry ${required}`);
   }
+
+  // v0.4.0: cover SVG ở đầu spine + manifest properties="svg" + landmark Bìa
+  const opf = entries.find(e => e.name === 'OEBPS/content.opf')!.data.toString();
+  assert.match(opf, /<item id="cover" href="cover\.xhtml" media-type="application\/xhtml\+xml" properties="svg"\/>/);
+  assert.match(opf, /<spine>\s*<itemref idref="cover"\/>/);
+  const coverXhtml = entries.find(e => e.name === 'OEBPS/cover.xhtml')!.data.toString();
+  assert.match(coverXhtml, /<svg[^>]*viewBox="0 0 1000 1600"/);
+  assert.match(coverXhtml, /Kiểm Định Xuất Bản/); // title từ metadata
+  const navXhtml = entries.find(e => e.name === 'OEBPS/nav.xhtml')!.data.toString();
+  assert.match(navXhtml, /epub:type="cover" href="cover\.xhtml"/);
 
   // Mọi entry trừ mimetype phải nén DEFLATE để file gọn
   for (const e of entries) {
@@ -161,6 +171,10 @@ test('story_export: docx là ZIP hợp lệ với document.xml WordprocessingML'
   // Style Normal mặc định phải tồn tại (Word strict mode không báo repair)
   assert.match(stylesXml, /w:styleId="Normal"/);
   assert.match(stylesXml, /w:docDefaults/);
+  // v0.4.0: outlineLvl cho Navigation pane + TOC field cập nhật được
+  assert.match(stylesXml, /w:styleId="Heading1"[\s\S]*?<w:outlineLvl w:val="0"\/>/);
+  assert.match(docXml, /fldCharType="begin" w:dirty="true"/);
+  assert.match(docXml, /TOC \\o "1-1"/);
   // Nội dung tiếng Việt giữ nguyên vẹn
   assert.ok(docXml.includes('Chương một mở đầu.'));
 });

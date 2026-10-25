@@ -1,12 +1,12 @@
 ---
 name: bible-architect
 description: >-
-  Xây dựng & duy trì Story Bible (kinh thánh tiểu thuyết) và theo dõi biến động trạng thái nhân vật (Character State Tracker): hồ sơ nhân vật, địa danh, thế giới quan, phe phái, hệ thống ma pháp/công nghệ, lịch sử biến động sức khỏe/tâm lý/vật phẩm qua từng chương. Use khi cần khởi tạo hoặc đồng bộ hồ sơ nhân vật, tách thực thể từ chương truyện vào bible/, trích xuất nhân vật/địa danh, theo dõi trạng thái nhân vật theo thời gian trong dự án story-architect-mcp v0.3.0.
+  Xây dựng & duy trì Story Bible (kinh thánh tiểu thuyết) và theo dõi biến động trạng thái nhân vật (Character State Tracker): hồ sơ nhân vật, địa danh, thế giới quan, phe phái, hệ thống ma pháp/công nghệ, lịch sử biến động sức khỏe/tâm lý/vật phẩm qua từng chương. Use khi cần khởi tạo hoặc đồng bộ hồ sơ nhân vật, tách thực thể từ chương truyện vào bible/, trích xuất nhân vật/địa danh, theo dõi trạng thái nhân vật theo thời gian trong dự án story-architect-mcp v0.4.0.
 ---
 
 # Bible Architect — Kiến trúc sư Story Bible & Worldbuilding
 
-Kỹ năng này biến AI thành **Kiến trúc sư Story Bible & Quản lý trạng thái nhân vật** chuyên nghiệp: thiết kế, xây dựng và duy trì toàn bộ "kinh thánh tiểu thuyết" của dự án `story-architect-mcp v0.3.0` — đảm bảo mọi nhân vật, địa danh, phe phái và hệ thống năng lực đều có hồ sơ Markdown chuẩn hóa (YAML frontmatter) và lịch sử biến động trạng thái (`character_states`) luôn nhất quán với bản thảo.
+Kỹ năng này biến AI thành **Kiến trúc sư Story Bible & Quản lý trạng thái nhân vật** chuyên nghiệp: thiết kế, xây dựng và duy trì toàn bộ "kinh thánh tiểu thuyết" của dự án `story-architect-mcp v0.4.0` — đảm bảo mọi nhân vật, địa danh, phe phái và hệ thống năng lực đều có hồ sơ Markdown chuẩn hóa (YAML frontmatter) và lịch sử biến động trạng thái (`character_states`) luôn nhất quán với bản thảo.
 
 ---
 
@@ -49,7 +49,7 @@ Kỹ năng này biến AI thành **Kiến trúc sư Story Bible & Quản lý tr�
 
 ### Bước 5: Đồng bộ quan hệ & kiểm chứng (Verify)
 - Gọi `story_map_relationships` để cập nhật đồ thị quan hệ nhân vật.
-- Chạy `story_query_context` với `rebuildIndex: true` để đảm bảo Knowledge Graph cập nhật toàn bộ thực thể mới.
+- Chạy `story_query_context` với `rebuildIndex: true` để đảm bảo Knowledge Graph cập nhật toàn bộ thực thể mới (v0.4.0: index tự stale theo fingerprint — sửa hồ sơ từ ngoài cũng được nhận tự động, không cần gọi rebuild).
 - Chạy `story_stats` để xem tổng số thực thể trong Bible.
 
 ---

@@ -15,6 +15,48 @@ function normKey(s: string): string {
   return s.toLowerCase().trim().replace(/_/g, ' ').replace(/\s+/g, ' ');
 }
 
+/** Chuẩn hoá item so sánh (substance-level, bỏ hoa/thường + space thừa). */
+function diffKey(s: string): string {
+  return s.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+/** Diff 2 mốc kế tiếp: mất/thu vật phẩm, bí mật mới học (read-only, không đổi file). */
+function transitionDiff(prev: CharacterStateSnapshot, cur: CharacterStateSnapshot) {
+  const prevInv = new Set(prev.inventory.map(diffKey));
+  const curInv = new Set(cur.inventory.map(diffKey));
+  const inventoryLost = cur.inventory.filter(i => !prevInv.has(diffKey(i)));
+  const inventoryAcquired = prev.inventory.filter(i => !curInv.has(diffKey(i)));
+  const prevSecrets = new Set(prev.knownSecrets.map(diffKey));
+  const secretsLearned = cur.knownSecrets.filter(k => !prevSecrets.has(diffKey(k)));
+  const locationChanged = diffKey(prev.location || '') !== diffKey(cur.location || '');
+  const conditionChanged = diffKey(prev.condition || '') !== diffKey(cur.condition || '');
+  return {
+    inventoryLost,
+    inventoryAcquired,
+    secretsLearned,
+    locationChanged,
+    conditionChanged,
+    statusChanged: prev.status !== cur.status,
+  };
+}
+
+/** Chế dòng "biến động so với mốc trước" danh sách bullet ngắn gọn. */
+function diffLine(prev?: CharacterStateSnapshot, cur?: CharacterStateSnapshot): string {
+  let out = '';
+  if (prev) {
+    const d = transitionDiff(prev, cur!);
+    const bits: string[] = [];
+    for (const lost of d.inventoryLost) bits.push(`− 🎒 ${lost}`);
+    for (const got of d.inventoryAcquired) bits.push(`+ 🎒 ${got}`);
+    for (const s of d.secretsLearned) bits.push(`+ 🗝️ ${s}`);
+    if (d.statusChanged) bits.push(`🛡️ ${prev.status} → ${cur!.status}`);
+    if (d.conditionChanged) bits.push('🩺 tình trạng thay đổi');
+    if (d.locationChanged) bits.push(`📍 ${prev.location || 'N/A'} → ${cur!.location || 'N/A'}`);
+    if (bits.length > 0) out = `- **Biến động so với mốc trước**: ${bits.join(' | ')}`;
+  }
+  return out;
+}
+
 export function registerCharacterStateTools(
   server: McpServer,
   getProject: () => StoryProject
@@ -122,12 +164,16 @@ export function registerCharacterStateTools(
         // không phụ thuộc thứ tự log.
         const orderedStates = [...charHistory.states].sort((a, b) => compareNatural(a.chapter, b.chapter));
         const historyLines = orderedStates.map((s, idx) => {
+          // v0.4.0: kèm diff với mốc kế trước theo thứ tự chương —
+          // continuity review thấy ngay mất/thu gì mà không cần so tay 2 snapshot.
+          const transition = idx > 0 ? diffLine(orderedStates[idx - 1], s) : '';
+          const transitionBlock = transition ? `\n${transition}` : '';
           return `### ${idx + 1}. Mốc: ${s.chapter}
 - **Vị trí**: ${s.location || 'N/A'}
 - **Tình trạng**: ${s.status} ${s.condition ? `(${s.condition})` : ''}
 - **Hành trang**: ${s.inventory.length > 0 ? s.inventory.join(', ') : 'Trống'}
 - **Bí mật đã biết**: ${s.knownSecrets.length > 0 ? s.knownSecrets.join('; ') : 'Chưa có'}
-- **Ghi chú**: ${s.notes || 'Không'}`;
+- **Ghi chú**: ${s.notes || 'Không'}${transitionBlock}`;
         }).join('\n\n');
 
         return {

@@ -1,11 +1,11 @@
 ---
 name: novel-writer-assistant
-description: Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp hỗ trợ sáng tác trực tiếp, quản lý phân cảnh/chương, rà soát tính liên tục đa tuyến (parallel timeline), theo dõi biến động nhân vật (character state tracker), phân tích quan hệ đa tầng & đường đi ngắn nhất (shortest path & provenance), phát hiện nhân vật hạt nhân (god-nodes), kiểm soát nhịp độ (pacing), giọng văn (voice), cảm xúc & teencode (sentiment), lỗ hổng cốt truyện (plot holes) và tạo Visual Dashboard thông qua story-architect-mcp v0.3.0.
+description: Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp hỗ trợ sáng tác trực tiếp, quản lý phân cảnh/chương, rà soát tính liên tục đa tuyến (parallel timeline), theo dõi biến động nhân vật (character state tracker), phân tích quan hệ đa tầng & đường đi ngắn nhất (shortest path & provenance), phát hiện nhân vật hạt nhân (god-nodes), kiểm soát nhịp độ (pacing), giọng văn (voice), cảm xúc & teencode (sentiment), lỗ hổng cốt truyện (plot holes) và tạo Visual Dashboard thông qua story-architect-mcp v0.4.0.
 ---
 
 # Novel Writer Assistant (Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp)
 
-Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp**, vận dụng sức mạnh toàn diện của server `story-architect-mcp v0.3.0` để sáng tác bản thảo trực tiếp, quản lý phân cảnh, theo dõi trạng thái nhân vật theo thời gian, giữ vững tính liên tục đa tuyến, kiểm soát nhịp độ, phân tích cảm xúc và tạo Dashboard trực quan sinh động.
+Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp**, vận dụng sức mạnh toàn diện của server `story-architect-mcp v0.4.0` để sáng tác bản thảo trực tiếp, quản lý phân cảnh, theo dõi trạng thái nhân vật theo thời gian, giữ vững tính liên tục đa tuyến, kiểm soát nhịp độ, phân tích cảm xúc và tạo Dashboard trực quan sinh động.
 
 ---
 
@@ -46,6 +46,12 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
    - Gặp thông báo "⏳ Không chiếm được file lock" = process khác đang ghi: **chờ vài giây rồi thử lại**, không quản lý tạm trạng thái trong bộ nhớ tool.
    - Ghi state qua mutator (log setup/payoff, plot hole, track state, timeline event, map relationship) là read-modify-write nguyên khối — có thể chạy song song an toàn tuyệt đối.
 
+9. **FRESH CONTEXT & DIFF REVIEW (Bối cảnh luôn tươi & diff sẵn sàng — v0.4.0):**
+   - Knowledge Graph index **tự stale theo fingerprint**: tác giả sửa hồ sơ/thêm file bible từ ngoài (editor, tool khác) → lần `story_query_context` kế tự thấy, không cần `rebuildIndex`.
+   - `story_track_character_state` `action: "history"` kèm **diff giữa các mốc** (vật phẩm mất/thu, bí mật mới, đổi status/vị trí) — review continuity không phải so tay 2 snapshot.
+   - `story_analyze_sentiment` là `lexicon-v3`: phủ định/tăng cường dạng không dấu ("khong vui", "rat") được tính đúng — văn viết muột không bị suy giảm polarity.
+   - `story_export` EPUB tự sinh **bìa SVG** từ metadata; DOCX có **TOC field thật** (mở Word → F9) + chương hiện trong Navigation Pane.
+
 ---
 
 ## 📋 WORKFLOW SÁNG TÁC CHƯƠNG TOÀN DIỆN (6 BƯỚC)
@@ -82,7 +88,7 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
 - Chạy `story_stats` để thống kê số từ, nhân vật hạt nhân (God-Nodes) và thực thể.
 - Chạy `story_analyze_pacing` để đánh giá nhịp độ chương truyện.
 - Chạy `story_analyze_voice` để kiểm tra tính đồng nhất của giọng văn và tỷ lệ hội thoại.
-- Chạy `story_analyze_sentiment` để phân tích đường cong cảm xúc (emotional arc), polarity, và tone drift. **Chú ý nhãn phương pháp `lexicon-v2`**: nếu output cảnh báo "Coverage < 5%", kết quả có thể bỏ qua ẩn dụ/nghị đảo — hãy rà bằng đọc trực tiếp thay vì tin con số.
+- Chạy `story_analyze_sentiment` để phân tích đường cong cảm xúc (emotional arc), polarity, và tone drift. **Chú ý nhãn phương pháp `lexicon-v3`**: nếu output cảnh báo "Coverage < 5%", kết quả có thể bỏ qua ẩn dụ/nghị đảo — hãy rà bằng đọc trực tiếp thay vì tin con số.
 - Chạy `story_detect_timeline_conflicts` để đảm bảo không mâu thuẫn thời gian hay phân thân nhân vật.
 - Xuất HTML Dashboard tổng quan bằng `story_generate_dashboard` khi cần báo cáo trực quan cho tác giả.
 
@@ -108,7 +114,7 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
 | | `story_resolve_plot_hole` | Đánh dấu đã khắc phục lỗ hổng |
 | **Phân tích Chất lượng (Analytics)** | `story_analyze_pacing` | Phân tích nhịp độ (Action / Dialogue / Description), tension curve chính xác theo cụm từ khóa |
 | | `story_analyze_voice` | Đánh giá giọng văn, tone, POV & drift so với style guide |
-| | `story_analyze_sentiment` | Phân tích cảm xúc, polarity, emotional arc & tone drift; method `lexicon-v2` (teencode, tiếng Việt mạng, emoticon, phủ định/tăng cường) + **cảnh báo Coverage < 5%** khi văn nhiều ẩn dụ |
+| | `story_analyze_sentiment` | Phân tích cảm xúc, polarity, emotional arc & tone drift; method `lexicon-v3` (teencode, tiếng Việt mạng, emoticon, phủ định/tăng cường) + **cảnh báo Coverage < 5%** khi văn nhiều ẩn dụ |
 | | `story_track_emotion` | Phân tích nhanh cảm xúc/tone của đoạn văn bản ngắn độc lập |
 | | `story_stats` | Thống kê từ vựng, độ dài, **Phát hiện Top 5 God-Nodes (Nhân vật trung tâm)** |
 | **Xuất bản, Dashboard & Dự án** | `story_generate_dashboard` | Tạo HTML Visual Dashboard tương tác trực quan với escaping an toàn XSS |

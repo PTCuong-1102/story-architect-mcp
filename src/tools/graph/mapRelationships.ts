@@ -1,9 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import * as path from 'node:path';
 import { StoryProject } from '../../server/StoryProject.js';
 import type { Relationship } from '../../server/types.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 import { invalidateIndex } from '../../utils/knowledgeGraph.js';
+import { walkDir, computePathsFingerprint } from '../../utils/fileUtils.js';
 
 /**
  * Tự phân tích bản thảo: đếm tần suất hai nhân vật cùng xuất hiện trong một chương.
@@ -50,6 +52,57 @@ async function autoDetectCooccurrences(
   project: StoryProject,
   minChapters = 2
 ): Promise<{ a: string; b: string; chapters: number }[]> {
+  const all = await computeAllCooccurrences(project);
+  return all.filter(r => r.chapters >= minChapters);
+}
+
+// ============================================================
+// v0.4.0 — Cache chế độ tự quét theo fingerprint stat
+// ============================================================
+
+interface ScanCache { fingerprint: string; results: { a: string; b: string; chapters: number }[]; }
+
+/** 1 entry mỗi projectPath — API server có thể mở nhiều dự án song song. */
+const scanCaches = new Map<string, ScanCache>();
+
+/** Chỉ dùng cho TEST — xóa cache quét (giả lập thay dữ liệu giữa các unit). */
+export function clearRelationshipScanCache(): void {
+  scanCaches.clear();
+}
+
+/**
+ * Fingerprint nguồn quyết định kết quả auto-scan: manuscript (nội dung chương)
+ * + bible/characters (tên hiển thị + variants). Đổi bất kỳ file nào → fingerprint
+ * lệch → quét lại. Đọc hết O(files) stat nhưng KHÔNG đọc nội dung — rẻ hơn
+ * nhiều lần trước (mỗi lần quét là đọc toàn bộ chapter).
+ */
+async function scanSourceFingerprint(project: StoryProject): Promise<string> {
+  const manuscriptFiles = await walkDir(project.manuscriptDir, ['.md']);
+  const characterFiles = await walkDir(path.join(project.bibleDir, 'characters'), ['.md']);
+  return computePathsFingerprint([...manuscriptFiles, ...characterFiles]);
+}
+
+/**
+ * Quét toàn bộ cặp đồng xuất hiện (không lọc ngưỡng — lọc bên ngoài),
+ * có cache theo fingerprint: gọi liên tục nhiều lần trong một phiên
+ * (preview → confirm, nhiều tool call) chỉ đọc đĩa 1 lần.
+ */
+async function computeAllCooccurrences(
+  project: StoryProject,
+): Promise<{ a: string; b: string; chapters: number }[]> {
+  const fingerprint = await scanSourceFingerprint(project);
+  const cached = scanCaches.get(project.projectPath);
+  if (cached && cached.fingerprint === fingerprint) return cached.results;
+
+  const results = await autoDetectCooccurrencesUncached(project);
+  scanCaches.set(project.projectPath, { fingerprint, results });
+  return results;
+}
+
+/** Quét gốc (luôn đọc đĩa) — giữ nguyên behavior của 0.3.0. */
+async function autoDetectCooccurrencesUncached(
+  project: StoryProject,
+): Promise<{ a: string; b: string; chapters: number }[]> {
   const characters = await resolveCharacterRefs(project);
   const arcs = await project.listArcs();
   if (characters.length < 2 || arcs.length === 0) return [];
@@ -80,10 +133,10 @@ async function autoDetectCooccurrences(
 
   const results: { a: string; b: string; chapters: number }[] = [];
   for (const [key, count] of pairCount.entries()) {
-    if (count >= minChapters) {
-      const [a, b] = (displayByKey.get(key) || key).split('|');
-      results.push({ a, b, chapters: count });
-    }
+    // Trả TẤT CẢ các cặp — lọc ngưỡng minChapters do wrapper làm (giúp cache
+    // dùng lại được cho nhiều ngưỡng khác nhau trong cùng phiên).
+    const [a, b] = (displayByKey.get(key) || key).split('|');
+    results.push({ a, b, chapters: count });
   }
   return results;
 }

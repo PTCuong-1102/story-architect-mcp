@@ -1,7 +1,7 @@
 ---
 name: foreshadowing-tracer
 description: >-
-  Quản lý kỹ thuật Chekhov's Gun cho tiểu thuyết: ghi nhận chi tiết cài cắm (setup), đánh dấu giải gỡ (payoff), liệt kê các "khẩu súng chưa bắn" (unfired), trực quan hóa danh sách manh mối trên Dashboard. Use khi cần đặt một chi tiết gài gắm vào chương, giải gỡ một manh mối cũ, kiểm tra những gài cắm nào chưa được giải quyết, lên kế hoạch payoff, theo dõi foreshadowing trong dự án story-architect-mcp v0.3.0.
+  Quản lý kỹ thuật Chekhov's Gun cho tiểu thuyết: ghi nhận chi tiết cài cắm (setup), đánh dấu giải gỡ (payoff), liệt kê các "khẩu súng chưa bắn" (unfired), trực quan hóa danh sách manh mối trên Dashboard. Use khi cần đặt một chi tiết gài gắm vào chương, giải gỡ một manh mối cũ, kiểm tra những gài cắm nào chưa được giải quyết, lên kế hoạch payoff, theo dõi foreshadowing trong dự án story-architect-mcp v0.4.0.
 ---
 
 # Foreshadowing Tracer — Thợ săn manh mối & khẩu súng Chekhov

@@ -110,6 +110,18 @@ test('character state tools', async (t) => {
     assert.ok(resLatest.content[0].text.includes('Ma Thú Sơn Mạch'));
   });
 
+  await t.test('history: kèm "Biến động so với mốc trước" (diff v0.4.0)', async () => {
+    const res = await handler({
+      character: 'Tiêu Viêm',
+      action: 'history',
+    });
+    assert.equal(res.isError, undefined);
+    const text = res.content[0].text as string;
+    // Mốc ch_005 so với ch_001: thu thêm Tử Tinh Dực Sư Vương Tinh, đổi vị trí
+    assert.ok(text.includes('Biến động so với mốc trước'), 'phải có dòng diff');
+    assert.ok(text.includes('Tử Tinh Dực Sư Vương Tinh'), 'diff chỉ ra vật phẩm mới thu');
+  });
+
   // Cleanup
   await fs.rm(tmpDir, { recursive: true, force: true });
 });

@@ -93,9 +93,57 @@ function buildMarkdown(projectName: string, author: string, genre: string, wordC
   return parts.join('\n');
 }
 
+/**
+ * v0.4.0 — Bìa EPUB (SVG inline trong XHTML, chuẩn EPUB3 properties="svg").
+ * Không thêm dep: vẽ render bằng SVG text — mỗi e-reader scale theo 100%.
+ * viewBox 1000×1600 (tỷ lệ 5:8 gần ISO B5) để mọi reader phủ kín khung bìa.
+ */
+function buildSvgCover(title: string, author: string, genre: string): string {
+  const spine = 42; // số "book spine" trang trí dưới đáy bìa
+  const titleLines = title.split(/[\n;|]+/).map(t => t.trim()).filter(Boolean).slice(0, 3);
+  const titleTspans = titleLines.length > 0
+    ? titleLines
+    : [title.slice(0, 60)];
+  const svgTitle = titleTspans
+    .map((t, i) => `<text x="500" y="${330 + i * 120}" font-family="Georgia, 'Times New Roman', serif" font-size="${titleLines.length > 1 ? 62 : 78}" font-weight="bold" fill="#fdf6e3" text-anchor="middle">${escapeXml(t)}</text>`)
+    .join('\n    ');
+  const authorLine = author || 'Ẩn danh';
+  const genreLine = genre || 'Tiểu thuyết';
+  const spineGaps = Array.from({ length: spine }, (_, i) =>
+    `<rect x="${(i * (1000 / spine)) + 6}" y="1524" width="${1000 / spine - 12}" height="40" fill="#1e3d59"/>`).join('');
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1600">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#17293e"/>
+      <stop offset="55%" stop-color="#1e3d59"/>
+      <stop offset="100%" stop-color="#7b4615"/>
+    </linearGradient>
+  </defs>
+  <rect width="1000" height="1600" fill="url(#bg)"/>
+  <rect x="60" y="80" width="880" height="1380" fill="none" stroke="#c9a86a" stroke-width="6" rx="4"/>
+  <rect x="84" y="104" width="832" height="1332" fill="none" stroke="#c9a86a" stroke-width="2"/>
+  <text x="500" y="215" font-family="Georgia, serif" font-size="34" letter-spacing="14" fill="#c9a86a" text-anchor="middle">${escapeXml(genreLine.toUpperCase())}</text>
+  ${svgTitle}
+  <line x1="260" y1="${330 + titleTspans.length * 120 + 30}" x2="740" y2="${330 + titleTspans.length * 120 + 30}" stroke="#c9a86a" stroke-width="3"/>
+  <text x="500" y="${330 + titleTspans.length * 120 + 110}" font-family="Georgia, serif" font-size="44" font-style="italic" fill="#ece2c6" text-anchor="middle">${escapeXml(authorLine)}</text>
+  ${spineGaps}
+</svg>`;
+}
+
 /** Tạo các entry của EPUB 3.0 (mimetype bắt buộc là entry đầu, lưu STORED). */
-function buildEpubEntries(title: string, author: string, language: string, chapters: ChapterContent[], outlineMd = ''): { name: string; data: Buffer; deflate?: boolean }[] {
+function buildEpubEntries(title: string, author: string, language: string, chapters: ChapterContent[], outlineMd = '', genre = ''): { name: string; data: Buffer; deflate?: boolean }[] {
   const bookId = randomUUID();
+
+  const coverXhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+  <head><title>${escapeXml(title)}</title>
+    <style>body { margin: 0; padding: 0; } svg { width: 100%; height: 100%; }</style>
+  </head>
+  <body epub:type="cover">
+    ${buildSvgCover(title, author, genre)}
+  </body>
+</html>
+`;
 
   const titlePage = `<section epub:type="titlepage"><h1>${escapeXml(title)}</h1>${author ? `<p>${escapeXml(author)}</p>` : ''}</section>`;
 
@@ -115,6 +163,10 @@ function buildEpubEntries(title: string, author: string, language: string, chapt
 
   return [
     { name: 'mimetype', data: Buffer.from('application/epub+zip'), deflate: false },
+    {
+      name: 'OEBPS/cover.xhtml',
+      data: Buffer.from(coverXhtml),
+    },
     {
       name: 'META-INF/container.xml',
       data: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
@@ -139,10 +191,12 @@ function buildEpubEntries(title: string, author: string, language: string, chapt
   </metadata>
   <manifest>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml" properties="svg"/>
     <item id="content" href="content.xhtml" media-type="application/xhtml+xml"/>
     <item id="css" href="style.css" media-type="text/css"/>
   </manifest>
   <spine>
+    <itemref idref="cover"/>
     <itemref idref="content"/>
   </spine>
 </package>
@@ -161,6 +215,7 @@ function buildEpubEntries(title: string, author: string, language: string, chapt
     <nav epub:type="landmarks" id="landmarks" hidden="">
       <h2>Landmarks</h2>
       <ol>
+        <li><a epub:type="cover" href="cover.xhtml">Bìa (Cover)</a></li>
         <li><a epub:type="toc" href="#toc">Mục lục</a></li>
         <li><a epub:type="bodymatter" href="content.xhtml">Nội dung chính</a></li>
       </ol>
@@ -222,6 +277,10 @@ function buildDocxEntries(title: string, author: string, language: string, wordC
   };
 
   pushParagraph(title, 'Title');
+  /** TOC field thật của Word: mở file → Word hỏi update fields (hoặc F9) →
+   * sinh mục lục tự động từ Heading1 (mỗi chương một mục). w:dirty="true" ép
+   * Word tính lại ngay khi mở. LibreOffice: Tools → Update → Indexes and Tables. */
+  paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \\o "1-1" \\h \\z \\u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t xml:space="preserve">[Mục lục] Mở trong Word → nhấn F9 (khi được hỏi "Update this field") để hoàn tất mục lục tự động.</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`);
   for (const c of chapters) {
     if (paragraphs.length > 1) pushPageBreak(); // mỗi chương bắt đầu ở trang mới
     pushParagraph(c.chapter, 'Heading1');
@@ -300,19 +359,19 @@ ${paragraphs.join('\n')}
   <w:style w:type="paragraph" w:styleId="Heading1">
     <w:name w:val="heading 1"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:keepNext/><w:spacing w:before="360" w:after="120"/></w:pPr>
+    <w:pPr><w:keepNext/><w:spacing w:before="360" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="36"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading2">
     <w:name w:val="heading 2"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:keepNext/><w:spacing w:before="240" w:after="80"/></w:pPr>
+    <w:pPr><w:keepNext/><w:spacing w:before="240" w:after="80"/><w:outlineLvl w:val="1"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="28"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Heading3">
     <w:name w:val="heading 3"/>
     <w:basedOn w:val="Normal"/>
-    <w:pPr><w:keepNext/><w:spacing w:before="200" w:after="60"/></w:pPr>
+    <w:pPr><w:keepNext/><w:spacing w:before="200" w:after="60"/><w:outlineLvl w:val="2"/></w:pPr>
     <w:rPr><w:b/><w:sz w:val="24"/></w:rPr>
   </w:style>
 </w:styles>
@@ -334,7 +393,7 @@ ${paragraphs.join('\n')}
       data: Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
   <Application>story-architect-mcp</Application>
-  <AppVersion>0.3.0</AppVersion>
+  <AppVersion>0.4.0</AppVersion>
   <Words>${wordCount}</Words>
 </Properties>
 `),
@@ -418,7 +477,7 @@ export function registerExportTool(server: McpServer, getProject: () => StoryPro
         }
         case 'epub': {
           // Nén mọi entry trừ mimetype (EPUB bắt buộc mimetype STORED đầu tiên)
-          const entries = buildEpubEntries(config.name, config.author, language, chapters, outlineMd)
+          const entries = buildEpubEntries(config.name, config.author, language, chapters, outlineMd, (config.genre || []).join(', '))
             .map(e => (e.name === 'mimetype' ? e : { ...e, deflate: true }));
           await fs.writeFile(outputPath, createZip(entries));
           break;

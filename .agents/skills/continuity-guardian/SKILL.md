@@ -1,12 +1,12 @@
 ---
 name: continuity-guardian
 description: >-
-  Rà soát tính liên tục (continuity) và mâu thuẫn của tiểu thuyết: phát hiện xung đột timeline đa tuyến (parallel threads, phân thân cùng lúc 2 nơi, đảo lộn thứ tự sự kiện), biến động trạng thái nhân vật (chấn thương, vật phẩm, tâm lý), lỗ hổng cốt truyện (plot holes), trôi giọng văn (voice drift) và cảm xúc (sentiment). Use khi cần audit dự án trước/sau khi viết, kiểm tra mốc thời gian đa tuyến, tìm lỗ hổng cốt truyện, đánh giá sự nhất quán nhân vật/timeline, so sánh chương với style_guide trong story-architect-mcp v0.3.0.
+  Rà soát tính liên tục (continuity) và mâu thuẫn của tiểu thuyết: phát hiện xung đột timeline đa tuyến (parallel threads, phân thân cùng lúc 2 nơi, đảo lộn thứ tự sự kiện), biến động trạng thái nhân vật (chấn thương, vật phẩm, tâm lý), lỗ hổng cốt truyện (plot holes), trôi giọng văn (voice drift) và cảm xúc (sentiment). Use khi cần audit dự án trước/sau khi viết, kiểm tra mốc thời gian đa tuyến, tìm lỗ hổng cốt truyện, đánh giá sự nhất quán nhân vật/timeline, so sánh chương với style_guide trong story-architect-mcp v0.4.0.
 ---
 
 # Continuity Guardian — Người gác cổng tính liên tục
 
-Kỹ năng này biến AI thành **Biên tập viên rà soát tính liên tục** chuyên nghiệp cho dự án `story-architect-mcp v0.3.0`: quét toàn bộ timeline (bao gồm các tuyến truyện song song), trạng thái nhân vật theo thời gian, lỗ hổng cốt truyện, giọng văn và nhịp độ để phát hiện mọi mâu thuẫn trước khi chúng đến tay độc giả.
+Kỹ năng này biến AI thành **Biên tập viên rà soát tính liên tục** chuyên nghiệp cho dự án `story-architect-mcp v0.4.0`: quét toàn bộ timeline (bao gồm các tuyến truyện song song), trạng thái nhân vật theo thời gian, lỗ hổng cốt truyện, giọng văn và nhịp độ để phát hiện mọi mâu thuẫn trước khi chúng đến tay độc giả.
 
 ---
 
@@ -66,7 +66,7 @@ Kỹ năng này biến AI thành **Biên tập viên rà soát tính liên tục
 | Ghi nhận biến động trạng thái | `story_track_character_state` | `character`, `chapter`, `action: "log"`, `state: {location, inventory, condition, status, knownSecrets, notes}` |
 | Ghi nhận lỗ hổng cốt truyện | `story_log_plot_hole` | `title`, `description`, `severity`, `chapters` (mutate-in-lock) |
 | Đánh dấu đã khắc phục | `story_resolve_plot_hole` | `id`, `resolution`, `status` (mutate-in-lock) |
-| Kiểm tra giọng văn & tone | `story_analyze_voice` / `story_analyze_sentiment` | `arc`, `chapter` — sentiment báo method `lexicon-v2` + ⚠️ khi Coverage < 5% |
+| Kiểm tra giọng văn & tone | `story_analyze_voice` / `story_analyze_sentiment` | `arc`, `chapter` — sentiment báo method `lexicon-v3` + ⚠️ khi Coverage < 5% |
 | Kiểm tra nhịp độ | `story_analyze_pacing` | `arc`, `chapter` |
 | Đối chiếu bối cảnh Knowledge Graph | `story_query_context` | `query` (fuzzy: không dấu/sai tả nhẹ vẫn khớp), `budgetTokens` |
 | Liệt kê gài cắm chưa giải | `story_list_unfired` | *(không tham số)* |

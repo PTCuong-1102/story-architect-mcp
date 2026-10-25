@@ -666,6 +666,9 @@ const NEGATORS: Map<string, number> = new Map([
   ['hong', -1],
   ['đéo', -1],
   ['deo', -1],
+  // v0.4.0 (lexicon-v3): phủ định không dấu bị bỏ sót trước giờ — văn MC/chat
+  // thường viết thô. "chua" (chưa) chủ ý KHÔNG thêm vì đụng "chua"=chanh/canh.
+  ['chang', -1],
   // English
   ['not', -1],
   ["n't", -1],
@@ -706,6 +709,16 @@ const INTENSIFIERS: Map<string, number> = new Map([
   ['vler', 1.8],
   ['siêu', 1.5],
   ['sieu', 1.5],
+  // v0.4.0 (lexicon-v3): intensifier không dấu bị bỏ sót — "rat"/"hoi"/"vo cung"
+  // trước giờ không khớp (chỉ dạng có dấu "rất"/"hơi"/"vô cùng") → intensity
+  // bị suy giảm khi văn muột/không dấu.
+  ['rat', 1.5],
+  ['hoi', 0.5],
+  ['vo cung', 2.0],
+  ['cuc ky', 2.0],
+  ['cuc ki', 2.0],
+  ['that su', 1.5],
+  ['thuc su', 1.5],
   // English
   ['very', 1.5],
   ['extremely', 2.0],

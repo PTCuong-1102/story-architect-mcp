@@ -108,4 +108,26 @@ describe('sentimentLexicon utility tests', () => {
     assert.strictEqual(polarityLabel(-0.7), 'Tiêu cực mạnh');
     assert.strictEqual(polarityLabel(0.0), 'Trung tính');
   });
+
+  it('lexicon-v3: intensifier/negator KHÔNG DẤU cũng phải khớp (v0.4.0)', () => {
+    // "rat" bị bỏ sót trước v0.4.0 → polarity bị suy giảm (no-boost)
+    const accented = analyzeSentiment('Tôi rất vui').polarity;
+    const unaccented = analyzeSentiment('Tôi rat vui').polarity;
+    assert.strictEqual(unaccented, accented, '"rat vui" phải tương đương "rất vui"');
+
+    // Compound "vo cung" (vô cùng) không được mất bậc intensifier
+    const accCompound = analyzeSentiment('tôi vô cùng hạnh phúc').polarity;
+    const unaccCompound = analyzeSentiment('tôi vo cung hanh phuc').polarity;
+    assert.strictEqual(unaccCompound, accCompound, '"vo cung hanh phuc" phải tương đương "vô cùng hạnh phúc"');
+
+    // "khong vui" (không vui) phải âm như "không vui"
+    const accNeg = analyzeSentiment('Tôi không vui').polarity;
+    const unaccNeg = analyzeSentiment('Tôi khong vui').polarity;
+    assert.strictEqual(unaccNeg, accNeg, '"khong vui" phải tương đương "không vui"');
+    assert.ok(unaccNeg < 0, 'phủ định "khong vui" phải cho polarity âm');
+
+    // Kiểm soát hồi quy: "chua" là vị món ăn ("canh chua") — chủ ý KHÔNG
+    // thêm như negator
+    assert.strictEqual(analyzeSentiment('Món canh này chua').polarity, 0);
+  });
 });

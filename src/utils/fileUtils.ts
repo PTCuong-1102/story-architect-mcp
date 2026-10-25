@@ -371,6 +371,29 @@ export async function getFileSize(filePath: string): Promise<number> {
 }
 
 /**
+ * Fingerprint nhẹ của danh sách file dựa trên stat (mtime+size).
+ * Dùng để phát hiện thay đổi "từ bên ngoài" (tác giả sửa file tay,
+ * Oxygen hoặc editor khác ghi đè) mà không cần đọc nội dung:
+ * mỗi phần tử = `<path>|<mtimeMs>|<size>`, nối bằng '\n'.
+ *
+ * Lưu ý: fingerprint nhạy vừa đủ — sửa nội dung cùng kích thước sẽ
+ * đổi mtime (các editor/vi đều cập nhật mtime khi ghi), nên rủi ro
+ * sót thay đổi là rất thấp. Nếu cần tuyệt đối hãy dùng hash nội dung.
+ */
+export async function computePathsFingerprint(paths: string[]): Promise<string> {
+  const parts: string[] = [];
+  for (const p of paths) {
+    try {
+      const st = await fs.stat(p);
+      parts.push(`${p}|${st.mtimeMs}|${st.size}`);
+    } catch {
+      parts.push(`${p}|missing`);
+    }
+  }
+  return parts.join('\n');
+}
+
+/**
  * Copy đệ quy một thư mục.
  */
 export async function copyDir(src: string, dest: string): Promise<void> {

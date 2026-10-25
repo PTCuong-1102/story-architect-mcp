@@ -1,7 +1,7 @@
 ---
 name: chapter-reviewer
 description: >-
-  Đóng vai beta-reader / biên tập viên đánh giá độc lập một chương truyện trong dự án story-architect-mcp v0.3.0: đọc bản thảo trực tiếp, phân tích nhịp độ (pacing), giọng văn (voice), cảm xúc (sentiment arc), biến động trạng thái nhân vật (character state), tính liên tục (continuity), gài cắm chưa giải gỡ, và trả về báo cáo feedback có cấu trúc kèm đề xuất chỉnh sửa ưu tiên.
+  Đóng vai beta-reader / biên tập viên đánh giá độc lập một chương truyện trong dự án story-architect-mcp v0.4.0: đọc bản thảo trực tiếp, phân tích nhịp độ (pacing), giọng văn (voice), cảm xúc (sentiment arc), biến động trạng thái nhân vật (character state), tính liên tục (continuity), gài cắm chưa giải gỡ, và trả về báo cáo feedback có cấu trúc kèm đề xuất chỉnh sửa ưu tiên.
 ---
 
 # Chapter Reviewer — Beta-reader & biên tập viên độc lập
@@ -23,7 +23,7 @@ Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc 
 
 3. **ĐỐI CHIẾU TRẠNG THÁI NHÂN VẬT & BIBLE:**
    - Đảm bảo hành động, thể lực và tâm lý của nhân vật ăn khớp với lịch sử biến động trong `story_track_character_state` (`action: "history"`).
-   - Tôn trọng nhãn phương pháp của engine phân tích: sentiment là `lexicon-v2` (thuần từ vựng) — khi output cảnh báo **Coverage < 5%** (văn giàu ẩn dụ/nghị đảo), hãy hạ mức tự tin của con số và rà bằng đọc trực tiếp trước khi đưa nhận xét cảm xúc.
+   - Tôn trọng nhãn phương pháp của engine phân tích: sentiment là `lexicon-v3` (thuần từ vựng) — khi output cảnh báo **Coverage < 5%** (văn giàu ẩn dụ/nghị đảo), hãy hạ mức tự tin của con số và rà bằng đọc trực tiếp trước khi đưa nhận xét cảm xúc.
 
 4. **GHI NHẬN LỖI VÀO HỆ THỐNG (Log findings):**
    - Nếu phát hiện mâu thuẫn thật sự → ghi nhận vào `story_log_plot_hole` (không tự ý ghi đè bản thảo).
@@ -65,7 +65,7 @@ Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc 
 | Đọc nội dung chương | `story_read_chapter` | `arc`, `chapter` |
 | Đo nhịp độ chương | `story_analyze_pacing` | `arc`, `chapter` |
 | Đo giọng văn & tone | `story_analyze_voice` | `arc`, `chapter` |
-| Phân tích đường cong cảm xúc | `story_analyze_sentiment` | `arc`, `chapter`, `windowSize` — method `lexicon-v2` + ⚠️ Coverage < 5% |
+| Phân tích đường cong cảm xúc | `story_analyze_sentiment` | `arc`, `chapter`, `windowSize` — method `lexicon-v3` + ⚠️ Coverage < 5% |
 | Kiểm tra lịch sử & trạng thái nhân vật | `story_track_character_state` | `character`, `action: "history"` / `"query"`, `chapter` |
 | Ghi nhận biến động trạng thái | `story_track_character_state` | `character`, `chapter`, `action: "log"`, `state` |
 | Đối chiếu hồ sơ Bible | `story_query_context` | `query` (fuzzy), `budgetTokens` |

@@ -186,7 +186,7 @@ ${arcSummary}
 - 🎭 **Giọng văn chủ đạo**: ${overallToneLabel}
 - 📊 **Polarity trung bình**: ${avgPolarity.toFixed(2)} (${polarityLabel(avgPolarity)})
 - 🎨 **Cảm xúc nổi bật**: ${overallResult.dominantEmotion.charAt(0).toUpperCase() + overallResult.dominantEmotion.slice(1)}
-- 🧮 **Phương pháp**: lexicon-v2 (thuần từ vựng, không semantic — khoảng 8 tone, hỗ trợ phủ định/tăng cường/teencode)${overallResult.coverage < 0.05 ? '\n- ⚠️ **Coverage tổng toàn Arc < 5%** — kết quả lexical có thể không đáng tin với văn nhiều ẩn dụ. Cân nhắc đọc trực tiếp hoặc dùng LLM phân tích.' : ''}
+- 🧮 **Phương pháp**: lexicon-v3 (thuần từ vựng, không semantic — khoảng 8 tone, hỗ trợ phủ định/tăng cường/teencode, khớp cả văn không dấu). Negation/intensifier không dấu ("khong", "rat", "vo cung"...) được tính đúng từ v0.4.0.${overallResult.coverage < 0.05 ? '\n- ⚠️ **Coverage tổng toàn Arc < 5%** — kết quả lexical có thể không đáng tin với văn nhiều ẩn dụ. Cân nhắc đọc trực tiếp hoặc dùng LLM phân tích.' : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
