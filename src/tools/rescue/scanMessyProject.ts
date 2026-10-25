@@ -3,8 +3,9 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../../server/StoryProject.js';
-import { walkDir, readFileBuffer, detectTextEncoding, decodeBuffer, getFileSize, isBlockedScanPath } from '../../utils/fileUtils.js';
+import { walkDir, readFileBuffer, detectTextEncoding, decodeBuffer, isBlockedScanPath } from '../../utils/fileUtils.js';
 import { countWords } from '../../utils/wordCount.js';
+import { detectLayoutProfile, type LayoutProfile, type FileInfoInput as LayoutFileInfo } from '../../utils/layoutDetect.js';
 import type { FileClassification } from '../../server/types.js';
 import { errResult } from '../../utils/mcpResults.js';
 
@@ -214,6 +215,46 @@ export function registerScanMessyProjectTool(server: McpServer, getProject: () =
       const totalWords = classifications.reduce((sum, c) => sum + c.wordCount, 0);
       const duplicatePairs = classifications.filter(c => c.similarTo.length > 0).length;
 
+      // ─── v0.6.0 — Nhận diện bố cục Hiện CÓ (layout profile) ───
+      // Người viết trước đây bố trí tiểu thuyết rất đa dạng: chapter phẳng,
+      // arc tự đặt tên, một file chứa cả quyển, số chương chữ/Hán tự... Báo
+      // cáo bố cục thật để LLM/người dùng quyết định (không ép sửa).
+      const layoutInputs: LayoutFileInfo[] = classifications.map(c => ({
+        rel: c.path,
+        words: c.wordCount,
+        content: fileContents.get(c.path) ?? null,
+      }));
+      const profile = detectLayoutProfile(layoutInputs);
+      const KIND_LABELS: Record<LayoutProfile['kind'], string> = {
+        already_standard: 'Đã chuẩn (manuscript/arc_XX/ch_XXX.md)',
+        arc_folders: 'Thư mục phân tập/arc (tự đặt tên)',
+        chapters_flat: 'Chương phẳng (nhiều file chương cạnh nhau)',
+        single_file: 'Một file lớn chứa nhiều chương',
+        mixed_loose: 'Loại hỗn tạp/rải rác',
+        unknown: 'Không nhận diện được',
+      };
+      const KIND_NEXT: Record<LayoutProfile['kind'], string> = {
+        already_standard: 'project đã theo layout chuẩn — chỉ cần story_init (nếu chưa) là dùng được ngay.',
+        arc_folders: 'story_auto_refactor_structure với strategy tự nhận diện sẽ map từng thư mục → arc_XX (giữ nội dung nguyên vẹn).',
+        chapters_flat: 'story_auto_refactor_structure sẽ đánh số lại ch_XXX vào arc_01.',
+        single_file: 'story_auto_refactor_structure với strategy auto_profile sẽ TÁCH theo tiêu đề chương ("Chương N" / "第N章" / "Chapter N") thành ch_001..., file gốc bảo toàn vào drafts_raw/.',
+        mixed_loose: 'quét kỹ hơn trước khi refactor; refactor vẫn dry-run được.',
+        unknown: 'thêm .md/.txt hoặc review tay trước khi refactor.',
+      };
+      const layoutSection = [
+        `🧭 Nhận diện bố cục (layout profile): ${KIND_LABELS[profile.kind]} (tin cậy ${Math.round(profile.confidence * 100)}%)`,
+        `   ├── File nhìn như chương: ${profile.chapterLikeFiles}`,
+        `   ├── Đánh dấu chương tìm thấy trong nội dung: ${profile.headingCount}`,
+        profile.singleFileCandidates.length > 0
+          ? `   ├── File lớn có nhiều chương: ${profile.singleFileCandidates.slice(0, 3).map(c => `${c.path} (${c.headingCount} chương, ${c.words} từ)`).join('; ')}`
+          : '',
+        profile.projectCandidates.length > 0
+          ? `   ├── 🔖 Nghi là NHIỀU tiểu thuyết riêng trong cùng cây: ${profile.projectCandidates.join(', ')} — story_set_project từng thư mục để tách dự án`
+          : '',
+        ...profile.notes.map(n => `   ├── ℹ️ ${n}`),
+        `   └── Gợi ý: ${KIND_NEXT[profile.kind]}`,
+      ].filter(Boolean).join('\n');
+
       const report = classifications.map(c => {
         const simInfo = c.similarTo.length > 0 ? ` ⚠️ Tương tự: ${c.similarTo.join(', ')}` : '';
         return `  ${c.category.padEnd(12)} [${Math.round(c.confidence * 100)}%] ${c.encoding.padEnd(12)} ${c.path} (${c.wordCount} từ)${simInfo}`;
@@ -233,6 +274,8 @@ ${duplicatePairs > 0 ? `⚠️ File có nội dung tương đồng: ${duplicateP
   Lore:       ${categoryCount.lore}
   Outline:    ${categoryCount.outline}
   Unknown:    ${categoryCount.unknown}
+
+${layoutSection}
 
 📋 Chi tiết:
 ${report}

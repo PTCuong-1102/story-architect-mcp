@@ -327,9 +327,11 @@ export type SnapshotsIndex = z.infer<typeof SnapshotsIndexSchema>;
 // ============================================================
 
 export const RefactorActionSchema = z.object({
-  type: z.enum(['move', 'rename', 'create-dir', 'skip']),
+  type: z.enum(['move', 'rename', 'create-dir', 'skip', 'split']),
   source: z.string(),
   destination: z.string(),
   reason: z.string(),
+  /** (v0.6.0) Cho type='split': số chương sẽ tách ra. */
+  chapterCount: z.number().int().min(1).optional(),
 });
 export type RefactorAction = z.infer<typeof RefactorActionSchema>;

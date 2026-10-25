@@ -12,6 +12,12 @@
 
 ---
 
+## 🆕 What's New in v0.6.0
+
+* **Layout Profiles — novels written before you install story-architect-mcp now get recognized**: the scanner reports how *your* existing novels are actually organized — chapter files nested in custom arc folders ("Quyển 3", "phan 2", "vol 2"...), flat chapter files, one big file containing the whole novel, or unseen multi-novel trees (multiple private novels in one folder tree). Multilingual chapter numbering is parsed: Arabic ("12"), Roman ("XII"), Vietnamese word numbers ("mười hai", "hai mươi mốt"), and CJK ("第十二章").
+* **`auto_profile` strategy (new default for `story_auto_refactor_structure`)**: one big file → split into standard `ch_XXX.md` chapters by their headings (titles preserved for EPUB/DOCX tables of content; original archived in `drafts_raw/`); custom arc folders → mapped to `arc_XX` without renaming your files; flat chapters → renumbered. Everything stays dry-run preview + auto-snapshot protected.
+* **Multi-novel detection**: `story_scan_messy_project` flags folders that look like *separate* novels sharing one tree, so you can point `story_set_project` at each.
+
 ## 🆕 What's New in v0.5.0
 
 * **Timeline Absolute Dates**: `"2025-01-01"` ≡ `"2025-01-01 00:00"` in omnipresence checks (format differences no longer hide conflicts); new conflict #4 flags day↔chapter order inversions (with a flashback heads-up); Mermaid diagrams sort by relativeOrder → parsed date → chapter; `addEvent` feedback tells you whether an ISO date joins conflict detection or is just an in-world display string.
@@ -39,8 +45,8 @@
 ## ✨ Key Features
 
 ### 🧹 1. Messy Project Rescue & Auto-Refactoring
-* **Smart File Classifier (`story_scan_messy_project`)**: Scans unorganized manuscript folders, auto-detects character encodings (UTF-8, Windows-1252, ISO-8859-1), computes content similarity matrices, and tags files (`Manuscript`, `Lore`, `Notes`, `Outline`) with confidence scores.
-* **Automated Refactoring (`story_auto_refactor_structure`)**: Reorganizes scattered files into a clean project structure with safe dry-run previews (`confirm: false`).
+* **Smart File Classifier (`story_scan_messy_project`)**: Scans unorganized manuscript folders, auto-detects character encodings (UTF-8, Windows-1252, ISO-8859-1), computes content similarity matrices, and tags files (`Manuscript`, `Lore`, `Notes`, `Outline`) with confidence scores. **v0.6.0** adds a Layout Profile section — recognizes how the novel was arranged before installation (custom arc folders, flat chapters, single big file, separate novels in one tree) with multilingual chapter numbers.
+* **Automated Refactoring (`story_auto_refactor_structure`)**: Reorganizes scattered files into a clean project structure with safe dry-run previews (`confirm: false`). **v0.6.0** adds the `auto_profile` strategy: a single-file novel is split into `manuscript/arc_01/ch_XXX.md` by its chapter headings (Vietnamese word numbers, Roman, Arabic, CJK supported), original archived into `drafts_raw/`; custom arc folders map to `arc_XX` content-preserving.
 * **Snapshot & Rollback Protection (`story_snapshot` / `story_rollback`)**: Creates automatic point-in-time state backups prior to file operations.
 
 ### 🔍 2. Continuity Auditing & Plot Hole Tracking

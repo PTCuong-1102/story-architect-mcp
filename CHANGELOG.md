@@ -3,6 +3,22 @@
 Tất cả thay đổi đáng chú ý của `story-architect-mcp` được ghi lại ở đây.
 Format theo [Keep a Changelog](https://keepachangelog.com/), version theo [SemVer](https://semver.org/).
 
+## [0.6.0] — 2026-10-25
+
+Đợt P4: nhận diện bố cục đa dạng cho tiểu thuyết có trước khi cài tool (nhiều người viết, nhiều dự án, bố trí khác nhau). Không thêm tool, không thêm dependency.
+
+### Added
+- **Layout profiles (`src/utils/layoutDetect.ts`)**: nhận diện bố cục HIỆN CÓ của từng dự án từ bằng chứng thật — 5 kiểu: `already_standard` (manuscript/arc_XX/ch_XXX.md), `arc_folders` (thư mục phân tập tự đặt tên: "Quyển 3", "phan 2", "vol 2"... và `chapters_flat` (chương phẳng trong thư mục gốc), `single_file` (một file lớn chứa nhiều chương), `mixed_loose`. Kèm confidence + notes + số chương đa ngôn ngữ:
+  - Số chương: Ả Rập ("12"), La Mã ("XII"), chữ Việt ("Chương mười hai", "hai mươi mốt", "một trăm linh hai" — cả không dấu "muoi hai/…muoi"), Hán tự ("第十二章", "第12章", "第一百零一回").
+  - Parser sai cú pháp → null (an toàn — "hai con mèo", "March 5", "3.5" không nuốt được vào xuất tách chương).
+- **`story_scan_messy_project` thêm mục "Nhận diện bố cục"**: báo cáo layout profile + file lớn năng lực hiển thị chương + phát hiện NHIỀU tiểu thuyết riêng trong cùng cây thư mục (projectCandidates) để `story_set_project` từng thư mục.
+- **`story_auto_refactor_structure` thêm strategy `auto_profile` (mặc định mới)**:
+  - `single_file` → TÁCH file theo tiêu đề chương thành `manuscript/arc_01/ch_XXX.md` (tiêu đề chép nguyên đầu file để EPUB/DOCX vẫn có mục lục), bản gốc bảo toàn vào `drafts_raw/`.
+  - `arc_folders` → map thư mục con → `arc_XX` (số trong tên nếu có), tên file giữ nguyên.
+  - `chapters_flat`/khác → rớt về by_arc/by_chapter như cũ. Mọi nhánh vẫn dry-run preview trước + auto snapshot trước khi confirm.
+- **`RefactorAction` thêm biến thể `split`** (chapterCount cho preview; schema additive).
+- **Test mới**: `test/layoutDetect.test.ts` (9 test P4) — 168 unit tests tổng cộng (từ 159).
+
 ## [0.5.0] — 2026-10-25
 
 Đợt P3: timeline theo ngày tuyệt đối, xếp hạng tìm kiếm BM25, và dọn snapshot (không thay đổi format `.story/*.json`, không thêm dependency).

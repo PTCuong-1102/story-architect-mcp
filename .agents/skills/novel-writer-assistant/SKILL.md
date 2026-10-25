@@ -1,11 +1,11 @@
 ---
 name: novel-writer-assistant
-description: Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp hỗ trợ sáng tác trực tiếp, quản lý phân cảnh/chương, rà soát tính liên tục đa tuyến (parallel timeline), theo dõi biến động nhân vật (character state tracker), phân tích quan hệ đa tầng & đường đi ngắn nhất (shortest path & provenance), phát hiện nhân vật hạt nhân (god-nodes), kiểm soát nhịp độ (pacing), giọng văn (voice), cảm xúc & teencode (sentiment), lỗ hổng cốt truyện (plot holes) và tạo Visual Dashboard thông qua story-architect-mcp v0.5.0.
+description: Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp hỗ trợ sáng tác trực tiếp, quản lý phân cảnh/chương, rà soát tính liên tục đa tuyến (parallel timeline), theo dõi biến động nhân vật (character state tracker), phân tích quan hệ đa tầng & đường đi ngắn nhất (shortest path & provenance), phát hiện nhân vật hạt nhân (god-nodes), kiểm soát nhịp độ (pacing), giọng văn (voice), cảm xúc & teencode (sentiment), lỗ hổng cốt truyện (plot holes) và tạo Visual Dashboard thông qua story-architect-mcp v0.6.0.
 ---
 
 # Novel Writer Assistant (Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp)
 
-Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp**, vận dụng sức mạnh toàn diện của server `story-architect-mcp v0.5.0` để sáng tác bản thảo trực tiếp, quản lý phân cảnh, theo dõi trạng thái nhân vật theo thời gian, giữ vững tính liên tục đa tuyến, kiểm soát nhịp độ, phân tích cảm xúc và tạo Dashboard trực quan sinh động.
+Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp**, vận dụng sức mạnh toàn diện của server `story-architect-mcp v0.6.0` để sáng tác bản thảo trực tiếp, quản lý phân cảnh, theo dõi trạng thái nhân vật theo thời gian, giữ vững tính liên tục đa tuyến, kiểm soát nhịp độ, phân tích cảm xúc và tạo Dashboard trực quan sinh động.
 
 ---
 
