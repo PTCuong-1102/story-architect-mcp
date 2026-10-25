@@ -126,6 +126,63 @@ function termOverlap(query: string, terms: string[]): number {
   return count;
 }
 
+// ============================================================
+// v0.5.0 — BM25 ranking cho khớp theo terms (zero-dep)
+// ============================================================
+
+/**
+ * BM25 — xếp hạng theo trọng số rare-term: từ hiếm ("phượng hoàng",
+ * "thiên tài thuần khiết") quyết định nhiều hơn từ phổ thông ("nhân vật",
+ * "cô gái"). Thay termOverlap nguyên thủy (đếm trùng không trọng số)
+ * ở bậc 4 của searchEntities — bậc 1–3 (tên/alias/fuzzy) vẫn ưu tiên hơn.
+ *
+ * Docs là danh sách tokens (KHÔNG dedup — tf có nghĩa), tokens đã fold
+ * không dấu. avgdl đo theo token; k1=1.2, b=0.75 (giá trị chuẩn).
+ */
+export interface Bm25Doc {
+  id: string;
+  tokens: string[];
+}
+
+export function bm25Rank(query: string, docs: Bm25Doc[], k1 = 1.2, b = 0.75): Map<string, number> {
+  const scores = new Map<string, number>();
+  if (docs.length === 0) return scores;
+
+  // Tokens query phải fold không dấu cùng phía với doc tokens (so khớp "kiếm" ≡ "kiem")
+  const qTokens = extractTerms(query).map(normalizeKey);
+  if (qTokens.length === 0) return scores;
+
+  const totalLen = docs.reduce((s, d) => s + d.tokens.length, 0);
+  const avgdl = totalLen / docs.length || 1;
+
+  // df từng token trong corpus
+  const df = new Map<string, number>();
+  for (const d of docs) {
+    const seen = new Set(d.tokens);
+    for (const t of seen) df.set(t, (df.get(t) || 0) + 1);
+  }
+  const N = docs.length;
+
+  for (const d of docs) {
+    if (d.tokens.length === 0) continue;
+    // tf trong doc này
+    const tf = new Map<string, number>();
+    for (const t of d.tokens) tf.set(t, (tf.get(t) || 0) + 1);
+
+    let score = 0;
+    for (const qt of qTokens) {
+      const f = tf.get(qt);
+      if (!f) continue;
+      const docFreq = df.get(qt) || 0;
+      const idf = Math.log(1 + (N - docFreq + 0.5) / (docFreq + 0.5));
+      score += idf * ((f * (k1 + 1)) / (f + k1 * (1 - b + (b * d.tokens.length) / avgdl)));
+    }
+    if (score > 0) scores.set(d.id, score);
+  }
+  return scores;
+}
+
+
 export function buildIndex(project: StoryProject): Promise<KnowledgeGraphIndex> {
   return (async () => {
     const characters: GraphCharacter[] = [];
@@ -254,6 +311,21 @@ export function searchEntities(index: KnowledgeGraphIndex, query: string): Entit
   const q = normalizeKey(query);
   const results: EntityMatch[] = [];
 
+  // v0.5.0 — BM25 corpus: tokens fold-không-dấu của mọi thực thể (raw,
+  // không dedup nên tf có nghĩa). BM25 chỉ dùng ở bậc 4 — bậc 1–3
+  // (tên/alias/fuzzy) vẫn ưu tiên hơn, giữ hành vi cũ.
+  const charDocs: Bm25Doc[] = index.characters.map(c => ({
+    id: c.name,
+    tokens: [...c.terms, ...c.aliases].map(normalizeKey).filter(Boolean).flatMap(t => t.split(' ')),
+  }));
+  const worldDocs: Bm25Doc[] = index.worldEntries.map(w => ({
+    id: w.name,
+    tokens: w.terms.map(normalizeKey).filter(Boolean).flatMap(t => t.split(' ')),
+  }));
+  const charScores = bm25Rank(query, charDocs);
+  const worldScores = bm25Rank(query, worldDocs);
+  const toScore = (raw: number): number => Math.min(0.4, (raw / (raw + 2)) * 0.4);
+
   for (const c of index.characters) {
     const nameKey = normalizeKey(c.name);
     const aliasKeys = c.aliases.map(normalizeKey);
@@ -263,7 +335,8 @@ export function searchEntities(index: KnowledgeGraphIndex, query: string): Entit
     else if (aliasKeys.some(a => a === q || a.includes(q) || q.includes(a))) score = 0.6;
     // Fuzzy Levenshtein: query sai chính tả/thiếu dấu vẫn khớp (score 0.5)
     else if (q.length >= 4 && (fuzzyMatches(nameKey, q) || aliasKeys.some(a => fuzzyMatches(a, q)))) score = 0.5;
-    else score = Math.min(0.4, termOverlap(query, c.terms) * 0.15);
+    // v0.5.0: BM25 (idf-weighted) thay đếm trùng tuyến tính
+    else score = toScore(charScores.get(c.name) || 0);
     if (score > 0) results.push({ kind: 'character', name: c.name, ref: c.fileKey, score });
   }
 
@@ -273,7 +346,7 @@ export function searchEntities(index: KnowledgeGraphIndex, query: string): Entit
     if (nameKey === q) score = 1.0;
     else if (nameKey.includes(q) || q.includes(nameKey)) score = 0.8;
     else if (q.length >= 4 && fuzzyMatches(nameKey, q)) score = 0.5;
-    else score = Math.min(0.4, termOverlap(query, w.terms) * 0.15);
+    else score = toScore(worldScores.get(w.name) || 0);
     if (score > 0) results.push({ kind: 'world', name: w.name, score });
   }
 

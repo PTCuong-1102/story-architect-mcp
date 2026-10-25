@@ -12,6 +12,12 @@
 
 ---
 
+## 🆕 What's New in v0.5.0
+
+* **Timeline Absolute Dates**: `"2025-01-01"` ≡ `"2025-01-01 00:00"` in omnipresence checks (format differences no longer hide conflicts); new conflict #4 flags day↔chapter order inversions (with a flashback heads-up); Mermaid diagrams sort by relativeOrder → parsed date → chapter; `addEvent` feedback tells you whether an ISO date joins conflict detection or is just an in-world display string.
+* **BM25 Search Ranking**: `story_query_context` term-level matches are now ranked by BM25 (zero-dep) — rare phrases ("phượng hoàng giáng thế") outweigh common filler words, while exact-name/alias/fuzzy matches keep precedence.
+* **`story_prune_snapshots`** (tool #30): safely clean up old snapshots — `keepLast` (default 10) + optional `olderThanDays`, dry-run preview before `confirm: true`, `keepLast < 3` requires explicit confirm, orphaned entries are cleaned from the index, and the report shows MB/KB freed.
+
 ## 🆕 What's New in v0.4.0
 
 * **Auto-Stale Index**: The knowledge graph cache (`.cbm/index.json`) now carries a stat fingerprint of its sources; editing bible files outside the tools (by hand, in another editor) is detected automatically — no more manual `rebuildIndex` calls.
@@ -139,7 +145,7 @@ Nếu bạn muốn cấu hình thủ công thay vì chạy `npx story-architect-
 
 ## 🛠️ MCP API Reference
 
-### 1. MCP Tools (29 Tools)
+### 1. MCP Tools (30 Tools)
 
 #### 🔹 Project & Structure Management
 | Tool Name | Key Parameters | Description |
@@ -165,6 +171,7 @@ Nếu bạn muốn cấu hình thủ công thay vì chạy `npx story-architect-
 | `story_auto_refactor_structure` | `strategy`, `confirm` | Refactors messy files into the standard novel structure (supports dry-run). |
 | `story_snapshot` | `description` | Creates a point-in-time state snapshot in `.story/snapshots/`. |
 | `story_rollback` | `snapshot_id`, `confirm` | Restores project state to a designated snapshot. |
+| `story_prune_snapshots` | `keepLast`, `olderThanDays`, `confirm` | Prunes old snapshots (preview by default; requires `confirm: true` to delete — v0.5.0). |
 
 #### 🔹 Continuity & Management Suite
 | Tool Name | Key Parameters | Description |

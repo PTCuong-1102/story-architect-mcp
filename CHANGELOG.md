@@ -3,6 +3,23 @@
 Tất cả thay đổi đáng chú ý của `story-architect-mcp` được ghi lại ở đây.
 Format theo [Keep a Changelog](https://keepachangelog.com/), version theo [SemVer](https://semver.org/).
 
+## [0.5.0] — 2026-10-25
+
+Đợt P3: timeline theo ngày tuyệt đối, xếp hạng tìm kiếm BM25, và dọn snapshot (không thay đổi format `.story/*.json`, không thêm dependency).
+
+### Added
+- **Timeline absolute dates** (`story_detect_timeline_conflicts`):
+  - Omnipresence qua parsed date: `"2025-01-01"` ≡ `"2025-01-01 00:00"` khi phát hiện phân thân cùng lúc (không còn sót conflict vì format khác).
+  - Conflict #4 "Mâu thuẫn ngày/chương": cùng thread hoặc cùng nhân vật, hai sự kiện có cả ngày lẫn chương nhưng thứ tự ngày ngược thứ tự chương (LLM hay ghi event "sau" ở chương trước) — nhắc kiểm tra flashback chủ ý.
+  - Mermaid sort thông minh: relativeOrder → parsed date → chương tự nhiên (trước giờ chỉ có relativeOrder).
+  - Feedback `addEvent`: ISO date được báo "tham gia phát hiện mâu thuẫn ngày"; in-world date (vd "Năm 340 Huyết Nhung") được báo "chỉ lưu hiển thị".
+- **BM25 ranking** (`story_query_context` / tìm kiếm theo terms): `bm25Rank` zero-dep (idf log(1+(N-df+0.5)/(df+0.5)), k1=1.2, b=0.75) thay đếm trùng tuyến tính ở bậc 4 của `searchEntities` — từ hiếm ("phượng hoàng", "thiên tài thuần khiết") quyết định nhiều hơn từ phổ thông ("nhân vật", "cô gái"). Bậc 1–3 (tên/alias/fuzzy) vẫn ưu tiên hơn, score terms cap 0.4.
+- **`story_prune_snapshots`** (tool thứ 30): dọn snapshot cũ an toàn — `keepLast` (mặc định 10) + `olderThanDays` optional, preview trước khi `confirm: true`; keepLast < 3 không confirm → từ chối (fail-safe); orphan entry (thư mục bị xóa tay) tự dọn khỏi index; đo dung lượng trước xóa, báo cáo MB/KB giải phóng; RMW `index.json` trong file lock (an toàn khi song song với `story_snapshot`).
+- **Test mới**: `test/p3Features.test.ts` (9 test P3) — 157 unit tests tổng cộng (từ 148).
+
+### Changed
+- `story_snapshot` khi ≥20 snapshots: khuyến nghị gọi `story_prune_snapshots` thay vì cảnh báo chung chung.
+
 ## [0.4.0] — 2026-10-25
 
 Đợt ổn định + tiện nghi: phát hiện thay đổi từ ngoài, bảo vệ regression chủ chốt, và nâng trải nghiệm xuất bản (không thay đổi format `.story/*.json`, không thêm dependency).

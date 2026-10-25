@@ -1,11 +1,11 @@
 ---
 name: novel-writer-assistant
-description: Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp hỗ trợ sáng tác trực tiếp, quản lý phân cảnh/chương, rà soát tính liên tục đa tuyến (parallel timeline), theo dõi biến động nhân vật (character state tracker), phân tích quan hệ đa tầng & đường đi ngắn nhất (shortest path & provenance), phát hiện nhân vật hạt nhân (god-nodes), kiểm soát nhịp độ (pacing), giọng văn (voice), cảm xúc & teencode (sentiment), lỗ hổng cốt truyện (plot holes) và tạo Visual Dashboard thông qua story-architect-mcp v0.4.0.
+description: Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp hỗ trợ sáng tác trực tiếp, quản lý phân cảnh/chương, rà soát tính liên tục đa tuyến (parallel timeline), theo dõi biến động nhân vật (character state tracker), phân tích quan hệ đa tầng & đường đi ngắn nhất (shortest path & provenance), phát hiện nhân vật hạt nhân (god-nodes), kiểm soát nhịp độ (pacing), giọng văn (voice), cảm xúc & teencode (sentiment), lỗ hổng cốt truyện (plot holes) và tạo Visual Dashboard thông qua story-architect-mcp v0.5.0.
 ---
 
 # Novel Writer Assistant (Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp)
 
-Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp**, vận dụng sức mạnh toàn diện của server `story-architect-mcp v0.4.0` để sáng tác bản thảo trực tiếp, quản lý phân cảnh, theo dõi trạng thái nhân vật theo thời gian, giữ vững tính liên tục đa tuyến, kiểm soát nhịp độ, phân tích cảm xúc và tạo Dashboard trực quan sinh động.
+Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên Tiểu Thuyết Chuyên Nghiệp**, vận dụng sức mạnh toàn diện của server `story-architect-mcp v0.5.0` để sáng tác bản thảo trực tiếp, quản lý phân cảnh, theo dõi trạng thái nhân vật theo thời gian, giữ vững tính liên tục đa tuyến, kiểm soát nhịp độ, phân tích cảm xúc và tạo Dashboard trực quan sinh động.
 
 ---
 
@@ -126,6 +126,9 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
 | **Cứu hộ & An toàn (Rescue Suite)** | `story_scan_messy_project` | Quét thư mục không chuẩn, phát hiện encoding (UTF-8, Windows-1252, ISO-8859-1) |
 | | `story_auto_refactor_structure` | Tự động tái cấu trúc thư mục dự án theo chuẩn với chế độ dry-run |
 | | `story_snapshot` / `story_rollback` | Tạo bản sao lưu 9 file metadata, làm mới cache `.cbm` và khôi phục dự án an toàn |
+| | `story_prune_snapshots` (v0.5.0) | Dọn snapshot cũ an toàn: `keepLast` (default 10), `olderThanDays`, preview trước khi `confirm: true`, báo MB giải phóng |
+| **Timeline & Ngày tuyệt đối (v0.5.0)** | `story_detect_timeline_conflicts` | `absoluteDate` ISO ("2025-01-01") tham gia phát hiện mâu thuẫn: phân thân cùng lúc (khớp mọi format cùng ngày), ngày ngược chương (conflict #4, cân nhắc flashback chủ ý); in-world date ("Năm 340 Huyết Nhung") chỉ lưu hiển thị |
+| **Tìm kiếm BM25 (v0.5.0)** | `story_query_context` | Khớp theo terms được xếp hạng BM25 — cụm hiếm ("phượng hoàng giáng thế") ưu tiên hơn từ phổ thông |
 
 ---
 

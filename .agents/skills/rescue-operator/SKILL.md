@@ -1,12 +1,12 @@
 ---
 name: rescue-operator
 description: >-
-  Cứu hộ và tái cấu trúc dự án tiểu thuyết lộn xộn: quét thư mục không tổ chức, phát hiện encoding hỏng (UTF-8/Windows-1252/ISO-8859-1), tìm file trùng lặp, tự động sắp xếp lại cấu trúc chuẩn (manuscript/bible/outline/drafts_raw) với dry-run an toàn, snapshot tự động và rollback. Use khi cần xử lý một thư mục tiểu thuyết cũ/ngổn ngang, khôi phục dự án bị lỗi, kiểm tra encoding tiếng Việt sai trong dự án story-architect-mcp v0.4.0.
+  Cứu hộ và tái cấu trúc dự án tiểu thuyết lộn xộn: quét thư mục không tổ chức, phát hiện encoding hỏng (UTF-8/Windows-1252/ISO-8859-1), tìm file trùng lặp, tự động sắp xếp lại cấu trúc chuẩn (manuscript/bible/outline/drafts_raw) với dry-run an toàn, snapshot tự động và rollback. Use khi cần xử lý một thư mục tiểu thuyết cũ/ngổn ngang, khôi phục dự án bị lỗi, kiểm tra encoding tiếng Việt sai trong dự án story-architect-mcp v0.5.0.
 ---
 
 # Rescue Operator — Chuyên gia cứu hộ & tái cấu trúc dự án
 
-Kỹ năng này biến AI thành **Chuyên gia cứu hộ và tái cấu trúc** dự án tiểu thuyết: tiếp nhận những thư mục bản thảo "thảm họa" (file rải rác, encoding hỏng, trùng lặp) và đưa chúng về chuẩn cấu trúc `story-architect-mcp v0.4.0` một cách **an toàn tuyệt đối** — luôn tự động tạo snapshot trước khi sửa đổi để có thể quay lại bất cứ lúc nào.
+Kỹ năng này biến AI thành **Chuyên gia cứu hộ và tái cấu trúc** dự án tiểu thuyết: tiếp nhận những thư mục bản thảo "thảm họa" (file rải rác, encoding hỏng, trùng lặp) và đưa chúng về chuẩn cấu trúc `story-architect-mcp v0.5.0` một cách **an toàn tuyệt đối** — luôn tự động tạo snapshot trước khi sửa đổi để có thể quay lại bất cứ lúc nào.
 
 ---
 
@@ -61,6 +61,7 @@ Kỹ năng này biến AI thành **Chuyên gia cứu hộ và tái cấu trúc**
 | Thực thi tái cấu trúc chuẩn | `story_auto_refactor_structure` | `projectPath`, `strategy`, `confirm: true` |
 | Tạo snapshot thủ công | `story_snapshot` | `label`, `description` |
 | Khôi phục snapshot | `story_rollback` | `snapshotId`, `confirm` |
+| Dọn snapshot cũ (preview trước) | `story_prune_snapshots` | `keepLast`, `olderThanDays`, `confirm` — v0.5.0 |
 | Đọc kiểm tra chương sau cứu hộ | `story_read_chapter` | `arc`, `chapter` |
 | Ghi lại nội dung chương an toàn | `story_write_chapter` | `arc`, `chapter`, `content`, `title` |
 | Thiết lập thư mục làm việc | `story_set_project` | `projectPath`, `force` |

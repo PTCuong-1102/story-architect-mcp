@@ -3,7 +3,7 @@ import { z } from 'zod';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { StoryProject } from '../../server/StoryProject.js';
-import { exists, copyDir, generateId, readJsonFile, writeJsonFile } from '../../utils/fileUtils.js';
+import { exists, copyDir, generateId, readJsonFile, writeJsonFile, withFileLock, lockPathFor } from '../../utils/fileUtils.js';
 import type { SnapshotsIndex, Snapshot } from '../../server/types.js';
 import { errResult, requireProject, isToolError } from '../../utils/mcpResults.js';
 import { invalidateIndex } from '../../utils/knowledgeGraph.js';
@@ -166,7 +166,7 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
         const entries = await fs.readdir(project.getSnapshotsDir(), { withFileTypes: true });
         const count = entries.filter(e => e.isDirectory()).length;
         if (count >= 20) {
-          retentionNote = `\n\n⚠️ Đã có ${count} snapshots — hãy dọn bớt snapshot cũ trong .story/snapshots/ để tránh phình đĩa (mỗi snapshot là full-copy).`;
+          retentionNote = `\n\n⚠️ Đã có ${count} snapshots — chạy \`story_prune_snapshots\` (v0.5.0) để dọn các snapshot cũ an toàn (preview trước khi xóa).`;
         }
       } catch {
         // không đọc được thư mục snapshots thì bỏ qua cảnh báo
@@ -184,6 +184,145 @@ export function registerSnapshotTools(server: McpServer, getProject: () => Story
 📂 Vị trí: ${snapshot.snapshotDir}
 
 💡 Để khôi phục: dùng \`story_rollback\` với id = "${snapshot.id}"${retentionNote}`,
+        }],
+      };
+    }
+  );
+
+  // ─── story_prune_snapshots (v0.5.0) ───
+  server.registerTool(
+    'story_prune_snapshots',
+    {
+      title: 'Prune Old Snapshots',
+      description: 'Dọn dẹp các snapshot cũ trong .story/snapshots/ (mỗi snapshot là full-copy nên dễ phình đĩa). Giữ lại N snapshot mới nhất; dry-run preview trước khi confirm. Snapshot mới nhất và backup pre-rollback gần đây luôn an toàn vị trí — chỉ bị xóa khi vượt ngưỡng được chọn.',
+      inputSchema: z.object({
+        keepLast: z.number().int().min(0).default(10)
+          .describe('Số snapshot MỚI NHẤT luôn giữ lại (kể cả khi vượt olderThanDays)'),
+        olderThanDays: z.number().int().min(1).optional()
+          .describe('Chỉ xóa snapshot cũ hơn số ngày này (bỏ trống = xóa mọi snapshot ngoài keepLast)'),
+        confirm: z.boolean().default(false)
+          .describe('false = chỉ xem preview, true = thực hiện xóa'),
+      }),
+    },
+    async (params) => {
+      const project = requireProject(getProject);
+      if (isToolError(project)) return project;
+
+      const snapshotsDir = project.getSnapshotsDir();
+      const indexPath = path.join(snapshotsDir, 'index.json');
+      const index: SnapshotsIndex | null = await readJsonFile<SnapshotsIndex>(indexPath);
+      if (!index || index.snapshots.length === 0) {
+        return errResult('ℹ️ Không có snapshot nào — không cần prune.');
+      }
+
+      // Mới nhất đứng đầu (createdAt giảm dần)
+      const sorted = [...index.snapshots].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const kept = sorted.slice(0, Math.max(0, params.keepLast));
+      const beyond = sorted.slice(Math.max(0, params.keepLast));
+
+      // olderThanDays lọc thêm: chỉ xóa những cái đủ già
+      const cutoffMs = params.olderThanDays ? Date.now() - params.olderThanDays * 86_400_000 : null;
+      const prunable = beyond.filter(s => cutoffMs === null || new Date(s.createdAt).getTime() <= cutoffMs);
+      // Orphan: entry còn trong index nhưng thư mục đã bị xóa tay — dọn index luôn
+      const dirMissing = async (id: string): Promise<boolean> => !(await exists(path.join(snapshotsDir, id)));
+      const orphans: Snapshot[] = [];
+      for (const s of kept) {
+        if (!/^[A-Za-z0-9_-]+$/.test(s.id) || await dirMissing(s.id)) orphans.push(s);
+      }
+
+      const toRemove = [...prunable, ...orphans];
+      if (toRemove.length === 0) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `✅ Không có snapshot nào cần prune (tổng ${index.snapshots.length}, đang giữ tối đa ${params.keepLast} mới nhất${params.olderThanDays ? `, ngưỡng tuổi ${params.olderThanDays} ngày` : ''}).`,
+          }],
+        };
+      }
+
+      // Đo kích thước (full-copy nên ~MB) trước khi xóa
+      const dirSize = async (dir: string): Promise<number> => {
+        let total = 0;
+        const walk = async (cur: string): Promise<void> => {
+          let entries;
+          try { entries = await fs.readdir(cur, { withFileTypes: true }); } catch { return; }
+          for (const e of entries) {
+            const p = path.join(cur, e.name);
+            if (e.isDirectory()) await walk(p);
+            else {
+              try { total += (await fs.stat(p)).size; } catch { /* bỏ qua */ }
+            }
+          }
+        };
+        await walk(dir);
+        return total;
+      };
+      const sizes = new Map<string, number>();
+      for (const s of toRemove) {
+        sizes.set(s.id, await dirSize(path.join(snapshotsDir, s.id)));
+      }
+
+      const getList = (list: Snapshot[]): string =>
+        list.map(s => {
+          const sz = sizes.get(s.id) || 0;
+          const human = sz >= 0.1 * 1024 * 1024 ? `${(sz / 1024 / 1024).toFixed(1)} MB` : `${(sz / 1024).toFixed(0)} KB`;
+          return `  - ${s.id} (${s.label}, ${s.createdAt}, ${human})`;
+        }).join('\n');
+
+      // keepLast quá thấp → yêu cầu chủ ý (confirm: true) mới cho cắt mỏng
+      if (params.keepLast < 3 && !params.confirm) {
+        return errResult(`⚠️ keepLast=${params.keepLast} thấp hơn 3 — có nguy cơ mất mạng lưới điểm khôi phục. Dùng ít nhất 3, hoặc gọi lại với confirm: true nếu thật sự muốn.`);
+      }
+
+      if (!params.confirm) {
+        const freedBytes2 = toRemove.reduce((sum, s) => sum + (sizes.get(s.id) || 0), 0);
+        const freed2 = freedBytes2 >= 0.1 * 1024 * 1024
+          ? `${(freedBytes2 / 1024 / 1024).toFixed(1)} MB`
+          : `${(freedBytes2 / 1024).toFixed(0)} KB`;
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `🔍 Preview Prune Snapshots
+
+🗑️ Sẽ xóa ${toRemove.length} snapshot (giải phóng ~${freed2}):
+${getList(toRemove)}
+
+✅ Giữ lại ${kept.length - orphans.length} snapshot mới nhất:
+${kept.filter(s => !orphans.includes(s)).map(s => `  - ${s.id} (${s.label}, ${s.createdAt})`).join('\n') || '  (không có — cẩn thận!)'}
+
+Để thực hiện, gọi lại với confirm: true.`,
+          }],
+        };
+      }
+
+      // ─── Thực hiện: xóa dir + cập nhật index trong 1 khoá ───
+      const removedIds = new Set(toRemove.map(s => s.id));
+      for (const s of toRemove) {
+        if (/^[A-Za-z0-9_-]+$/.test(s.id)) {
+          await fs.rm(path.join(snapshotsDir, s.id), { recursive: true, force: true }).catch(() => { /* đã mất sẵn */ });
+        }
+      }
+      // RMW index trong khoá — không mất entry khi prune song song với
+      // story_snapshot tạo mục mới cùng lúc.
+      await withFileLock(lockPathFor(indexPath), async () => {
+        const cur: SnapshotsIndex = await readJsonFile<SnapshotsIndex>(indexPath) || { snapshots: [] };
+        await writeJsonFile(indexPath, { snapshots: cur.snapshots.filter(s => !removedIds.has(s.id)) });
+      });
+
+      const freedBytes = [...removedIds].reduce((sum, id) => sum + (sizes.get(id) || 0), 0);
+      const freed = freedBytes >= 0.1 * 1024 * 1024
+        ? `${(freedBytes / 1024 / 1024).toFixed(1)} MB`
+        : `${(freedBytes / 1024).toFixed(0)} KB`;
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `✅ Prune hoàn tất!
+
+🗑️ Đã xóa ${toRemove.length} snapshot, giải phóng ${freed}:
+${getList(toRemove)}
+
+📸 Còn lại ${index.snapshots.length - toRemove.length} snapshot (đã cập nhật index.json).`,
         }],
       };
     }
