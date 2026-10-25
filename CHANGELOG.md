@@ -20,6 +20,13 @@ Format theo [Keep a Changelog](https://keepachangelog.com/), version theo [SemVe
 ### Changed
 - `story_snapshot` khi ≥20 snapshots: khuyến nghị gọi `story_prune_snapshots` thay vì cảnh báo chung chung.
 
+### Fixed
+- **`parseAbsoluteDate` nghiêm ngặt + frame local thống nhất**: chỉ chấp nhận format có thành phần ISO date (`2025-06-15...`) — văn xuôi kiểu tiếng Anh ("March 5") và năm thuần ("2025") không còn "hào phóng" lọt vào conflict detection; mốc có `Z`/offset chuẩn hóa về giờ lịch địa phương nên 2 cách ghi offset khác nhau cùng 1 instant khớp nhau (không còn lệch dấu ±7h nếu trộn mốc UTC với date-only gần midnight).
+- **Prune race thu hẹp**: nhánh confirmed tính lại plan trên index vừa đọc TRONG 1 khoá (đọc → tính → xóa dir → RMW index) — prune song song với `story_snapshot` không còn đọc topology cũ; báo cáo "Còn lại N" khớp thực tế, có nhánh "không còn gì để xóa".
+- **Đai an toàn `keepLast`**: schema `min(1)` + guard runtime "≥ 1" kể cả khi `confirm: true` — không cho phép xóa toàn bộ snapshot.
+- **Đếm snapshot cảnh báo ≥20** đọc từ `index.json` thay vì liệt kê thư mục (orphan bị xóa tay không còn tính nhầm).
+- Dọn dead code `termOverlap` (bị BM25 thay thế từ v0.5.0).
+
 ## [0.4.0] — 2026-10-25
 
 Đợt ổn định + tiện nghi: phát hiện thay đổi từ ngoài, bảo vệ regression chủ chốt, và nâng trải nghiệm xuất bản (không thay đổi format `.story/*.json`, không thêm dependency).

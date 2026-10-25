@@ -126,6 +126,45 @@ function makeSnapshotHandlers(project: StoryProject) {
   return tools;
 }
 
+// ============================================================
+// v0.5.0-fix — parseAbsoluteDate nghiêm ngặt + frame local
+// ============================================================
+
+test('P3.1-fix: parseAbsoluteDate từ chối văn xuôi/rác, khớp Z-offset cùng giờ lịch', () => {
+  // Parser tiếng Anh "hào phóng" trước đây ("March 5" → valid) đã bị chặn
+  assert.equal(parseAbsoluteDate('March 5'), null, 'tiếng Anh tự do → in-world');
+  assert.equal(parseAbsoluteDate('2025'), null, 'năm thuần → in-world');
+  assert.equal(parseAbsoluteDate('2025-13-45'), null, 'date rác → null');
+  assert.equal(parseAbsoluteDate('2025-01-01garbage'), null, 'date dính đuôi rác → null');
+  // Hai cách ghi offset khác nhau (Z, +05:00) diễn tả CÙNG instant →
+  // chuẩn hóa frame local ra cùng giá trị (TZ-agnostic, bất kể timezone runner)
+  assert.equal(
+    parseAbsoluteDate('2025-06-15T09:30:00Z')!.getTime(),
+    parseAbsoluteDate('2025-06-15T14:30:00+05:00')!.getTime(),
+    'Z-offset ≡ offset khác cùng instant',
+  );
+  // Date-only khớp giờ lịch: date-only "2025-06-15" (local midnight) nằm
+  // cùng NGÀY lịch với mốc Z sau chuẩn hóa (khi ngày chưa đổi qua ranh giới)
+  assert.equal(parseAbsoluteDate('2025-06-15T09:30:00Z')!.getDate(), 15);
+  assert.ok(parseAbsoluteDate('2025-06-15T09:30')!.getHours() === 9, 'giữ giờ khi có timestamp');
+});
+
+test('P3.3-fix prune: keepLast=0 bị chặn kể cả khi confirm', async () => {
+  const tmpDir = await mktmp('story-prune-zero-');
+  const project = new StoryProject(tmpDir);
+  await project.initializeProject({ name: 'Prune Zero' });
+  await createSnapshot(project, 's1');
+
+  const tools = makeSnapshotHandlers(project);
+  const denied = await tools['story_prune_snapshots'].handler({ keepLast: 0, confirm: true } as never);
+  assert.equal(denied.isError, true, 'keepLast=0 không được xóa toàn bộ');
+  // Snapshot còn nguyên
+  const idxRaw = JSON.parse(await fs.readFile(path.join(tmpDir, '.story', 'snapshots', 'index.json'), 'utf-8')) as { snapshots: unknown[] };
+  assert.equal(idxRaw.snapshots.length, 1, 'không xóa gì khi keepLast=0');
+
+  await fs.rm(tmpDir, { recursive: true, force: true });
+});
+
 test('P3.3 prune: preview không xóa, confirm xóa đúng + index sạch + keepLast', async () => {
   const tmpDir = await mktmp('story-prune-');
   const project = new StoryProject(tmpDir);

@@ -29,18 +29,31 @@ function hasOrder(e: TimelineEvent): boolean {
 export function parseAbsoluteDate(value?: string): Date | null {
   if (!value) return null;
   const trimmed = value.trim();
-  let d: Date;
+  // Chỉ chấp nhận format có thành phần ISO date (2025-06-15...). "March 5",
+  // "2025" (năm thuần) không qua được → null (in-world, chỉ lưu hiển thị):
+  // Date parser tiếng Anh "hào phóng" không được để đưa văn xuôi vào check.
+  if (!/^\d{4}-\d{2}-\d{2}([T ].*)?$/.test(trimmed)) return null;
+  let parsed: Date;
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     // Thuần ngày → local midnight (khớp dai với "... 00:00")
-    d = new Date(`${trimmed}T00:00:00`);
+    parsed = new Date(`${trimmed}T00:00:00`);
   } else if (/^\d{4}-\d{2}-\d{2} /.test(trimmed)) {
     // "YYYY-MM-DD HH:mm" → local time (new Date hiểu space như UTC quanh region)
-    d = new Date(trimmed.replace(' ', 'T'));
+    parsed = new Date(trimmed.replace(' ', 'T'));
   } else {
-    d = new Date(trimmed);
+    // ISO đầy đủ (có/không Z, có/không giây)
+    parsed = new Date(trimmed);
   }
   // In-world date (vd "Năm 340 Huyết Nhung") parse lỗi → null: chỉ lưu hiển thị.
-  return isNaN(d.getTime()) ? null : d;
+  if (isNaN(parsed.getTime())) return null;
+  // v0.5.0-fix: chuẩn hóa về cùng frame local — mốc có Z/offset rơi về
+  // giờ lịch địa phương của instant (09:30Z ở TZ+7 = 16:30 local). Khác
+  // format ghi offset nào (Z, +05:00...) diễn tả cùng khoảnh khắc vẫn khớp
+  // nhau, không còn lệch dấu ±7h với mốc date-only gần midnight.
+  return new Date(
+    parsed.getFullYear(), parsed.getMonth(), parsed.getDate(),
+    parsed.getHours(), parsed.getMinutes(), parsed.getSeconds(),
+  );
 }
 
 /**

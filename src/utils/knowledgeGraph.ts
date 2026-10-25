@@ -117,15 +117,6 @@ function fuzzyMatches(a: string, b: string): boolean {
 }
 
 /** Số token trùng giữa query và danh sách terms của thực thể. */
-function termOverlap(query: string, terms: string[]): number {
-  const qTokens = extractTerms(query);
-  let count = 0;
-  for (const t of qTokens) {
-    if (terms.includes(t)) count++;
-  }
-  return count;
-}
-
 // ============================================================
 // v0.5.0 — BM25 ranking cho khớp theo terms (zero-dep)
 // ============================================================
