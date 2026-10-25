@@ -6,6 +6,7 @@ import { StoryProject } from '../../server/StoryProject.js';
 import { walkDir, readFileBuffer, detectTextEncoding, decodeBuffer, isBlockedScanPath } from '../../utils/fileUtils.js';
 import { countWords } from '../../utils/wordCount.js';
 import { detectLayoutProfile, type LayoutProfile, type FileInfoInput as LayoutFileInfo } from '../../utils/layoutDetect.js';
+import { loadLayoutVerdict } from './aiLayout.js';
 import type { FileClassification } from '../../server/types.js';
 import { errResult } from '../../utils/mcpResults.js';
 
@@ -225,6 +226,30 @@ export function registerScanMessyProjectTool(server: McpServer, getProject: () =
         content: fileContents.get(c.path) ?? null,
       }));
       const profile = detectLayoutProfile(layoutInputs);
+
+      // ─── v0.7.0 — Phán đoán AI (.story/layout-verdict.json) ưu tiên trên heuristic ───
+      const verdict = await loadLayoutVerdict(scanPath);
+      let aiVerdictSection = '';
+      if (verdict) {
+        const v = verdict.verdict;
+        const disagree = verdict.heuristicKind !== v.kind;
+        aiVerdictSection = [
+          `🧠 Phán đoán AI (lưu ${verdict.appliedAt.slice(0, 10)}) đang được ƯU TIÊN: ${v.kind} (tin cậy ${Math.round(v.confidence * 100)}%)`,
+          `   ├── Lý giải: ${v.reasoning.slice(0, 300)}`,
+          disagree
+            ? `   ├── ⚠️ LỆCH heuristic (${verdict.heuristicKind} bên dưới) — hệ thống tin AI, kiểm chứng bằng preview refactor.`
+            : '   ├── Khớp heuristic bên dưới.',
+          `   └── Muốn quay về heuristic: xóa .story/layout-verdict.json`,
+          '',
+        ].join('\n');
+      } else {
+        aiVerdictSection = [
+          '🤖 Tip: phân tích bố cục bằng AI thay vì quy tắc cứng — story_export_layout_brief → bạn/AI đọc brief',
+          '    → story_apply_layout_verdict nộp phán đoán → scan & refactor sẽ dùng phán đoán đó.',
+          '',
+        ].join('\n');
+      }
+
       const KIND_LABELS: Record<LayoutProfile['kind'], string> = {
         already_standard: 'Đã chuẩn (manuscript/arc_XX/ch_XXX.md)',
         arc_folders: 'Thư mục phân tập/arc (tự đặt tên)',
@@ -275,6 +300,7 @@ ${duplicatePairs > 0 ? `⚠️ File có nội dung tương đồng: ${duplicateP
   Outline:    ${categoryCount.outline}
   Unknown:    ${categoryCount.unknown}
 
+${aiVerdictSection}
 ${layoutSection}
 
 📋 Chi tiết:

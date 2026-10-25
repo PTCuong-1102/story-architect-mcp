@@ -12,6 +12,12 @@
 
 ---
 
+## 🆕 What's New in v0.7.0
+
+* **AI-assisted layout analysis ("AI in-the-loop")** — recognition is no longer capped by regex rules. `story_export_layout_brief` (tool #31) packages raw evidence — file tree, word counts, content excerpts, plus the heuristic profile as a *flagged-not-trusted* opinion — for the AI agent in your session to analyze by context: chapter titles without the word "chapter" ("I. Mở màn", "Ngày 17-3"), author-named files (`01.txt`, `t4-bai-viet`), epistolary/diary formats, several interleaved novels.
+* **`story_apply_layout_verdict` (tool #32)** — the AI submits its verdict as JSON (layout kind, chapter boundaries by line number, folder→arc mapping, per-file classification). The server validates strictly (paths inside the project, destinations limited to `manuscript/ | bible/ | outline/ | drafts_raw/`, chapter start lines must exist) and stores it in `.story/layout-verdict.json`.
+* **Refactor & scan prefer the AI verdict**: `story_auto_refactor_structure` (auto_profile) splits by the AI's chapter boundaries — the regex no longer needs a keyword; `story_scan_messy_project` shows the AI verdict with a heuristic cross-check warning when they disagree. Safety unchanged: dry-run preview + auto-snapshot; the AI only *directs*, the server *executes*. Delete `.story/layout-verdict.json` to fall back to rules.
+
 ## 🆕 What's New in v0.6.0
 
 * **Layout Profiles — novels written before you install story-architect-mcp now get recognized**: the scanner reports how *your* existing novels are actually organized — chapter files nested in custom arc folders ("Quyển 3", "phan 2", "vol 2"...), flat chapter files, one big file containing the whole novel, or unseen multi-novel trees (multiple private novels in one folder tree). Multilingual chapter numbering is parsed: Arabic ("12"), Roman ("XII"), Vietnamese word numbers ("mười hai", "hai mươi mốt"), and CJK ("第十二章").
@@ -151,7 +157,7 @@ Nếu bạn muốn cấu hình thủ công thay vì chạy `npx story-architect-
 
 ## 🛠️ MCP API Reference
 
-### 1. MCP Tools (30 Tools)
+### 1. MCP Tools (32 Tools)
 
 #### 🔹 Project & Structure Management
 | Tool Name | Key Parameters | Description |

@@ -1,12 +1,12 @@
 ---
 name: rescue-operator
 description: >-
-  Cứu hộ và tái cấu trúc dự án tiểu thuyết lộn xộn: quét thư mục không tổ chức, phát hiện encoding hỏng (UTF-8/Windows-1252/ISO-8859-1), tìm file trùng lặp, tự động sắp xếp lại cấu trúc chuẩn (manuscript/bible/outline/drafts_raw) với dry-run an toàn, snapshot tự động và rollback. Use khi cần xử lý một thư mục tiểu thuyết cũ/ngổn ngang, khôi phục dự án bị lỗi, kiểm tra encoding tiếng Việt sai trong dự án story-architect-mcp v0.6.0.
+  Cứu hộ và tái cấu trúc dự án tiểu thuyết lộn xộn: quét thư mục không tổ chức, phát hiện encoding hỏng (UTF-8/Windows-1252/ISO-8859-1), tìm file trùng lặp, tự động sắp xếp lại cấu trúc chuẩn (manuscript/bible/outline/drafts_raw) với dry-run an toàn, snapshot tự động và rollback. Use khi cần xử lý một thư mục tiểu thuyết cũ/ngổn ngang, khôi phục dự án bị lỗi, kiểm tra encoding tiếng Việt sai trong dự án story-architect-mcp v0.7.0.
 ---
 
 # Rescue Operator — Chuyên gia cứu hộ & tái cấu trúc dự án
 
-Kỹ năng này biến AI thành **Chuyên gia cứu hộ và tái cấu trúc** dự án tiểu thuyết: tiếp nhận những thư mục bản thảo "thảm họa" (file rải rác, encoding hỏng, trùng lặp) và đưa chúng về chuẩn cấu trúc `story-architect-mcp v0.6.0` một cách **an toàn tuyệt đối** — luôn tự động tạo snapshot trước khi sửa đổi để có thể quay lại bất cứ lúc nào.
+Kỹ năng này biến AI thành **Chuyên gia cứu hộ và tái cấu trúc** dự án tiểu thuyết: tiếp nhận những thư mục bản thảo "thảm họa" (file rải rác, encoding hỏng, trùng lặp) và đưa chúng về chuẩn cấu trúc `story-architect-mcp v0.7.0` một cách **an toàn tuyệt đối** — luôn tự động tạo snapshot trước khi sửa đổi để có thể quay lại bất cứ lúc nào.
 
 ---
 
@@ -39,6 +39,7 @@ Kỹ năng này biến AI thành **Chuyên gia cứu hộ và tái cấu trúc**
 
 ### Bước 3: Lập kế hoạch tái cấu trúc (Dry-run Preview)
 - Gọi `story_auto_refactor_structure` với `strategy` (mặc định từ v0.6.0 là `auto_profile` — tự chọn hành vi theo bố cục nhận diện; còn `by_chapter`/`by_arc`/`chronological` nếu muốn ép kiểu) và `confirm: false`.
+- **từ v0.7.0 — luồng phán đoán AI (khuyến nghị khi bố cục quirks):** gọi `story_export_layout_brief` → đọc brief (cây file + trích nội dung + heuristic profile) → phán đoán bằng NGỮ CẢNH (chương không từ khóa "Chương", tên file tự đặt, truyện thư từ/ngày tháng...) → nộp `story_apply_layout_verdict` (chapters có startLine 1-based; hình dạng JSON đúng → server tự xác thực) → chạy lại refactor: preview sẽ nhắc "🧠 Phán đoán AI". Để quay về heuristic: xóa `.story/layout-verdict.json`.
 - Bố cục từng dạng tác giả bố trí trước khi cài tool được nhận diện tự động: thư mục arc tự đặt tên ("Quyển 3", "phan 2"...) → map `arc_XX`; chương phẳng → đánh số lại; một file lớn chứa cả quyển ("Chương N"/"Chapter N"/"第N章" — cả số chữ "mười hai", La Mã, Hán tự) → ✂️ TÁCH thành ch_XXX (bản gốc bảo toàn drafts_raw/). Trình bày bảng preview chi tiết cho tác giả duyệt.
 
 ### Bước 4: Tạo Snapshot & Thực thi an toàn (Snapshot & Execute)

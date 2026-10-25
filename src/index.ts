@@ -42,7 +42,7 @@ async function handleCliOrServer() {
     return;
   }
   if (subCommand === '--version' || subCommand === '-v' || subCommand === 'version') {
-    console.log('story-architect-mcp v0.6.0');
+    console.log('story-architect-mcp v0.7.0');
     return;
   }
 
@@ -99,6 +99,8 @@ async function registerAllTools(
   registerScanMessyProjectTool(server, getProject);
   registerAutoRefactorTool(server, getProject);
   registerSnapshotTools(server, getProject);
+  const { registerAiLayoutTools } = await import('./tools/rescue/aiLayout.js');
+  registerAiLayoutTools(server, getProject);
 
   registerPlotHoleTools(server, getProject);
   registerStatsTool(server, getProject);
@@ -177,7 +179,7 @@ async function startMcpServer() {
 
   const server = new McpServer({
     name: 'story-architect-mcp',
-    version: '0.6.0',
+    version: '0.7.0',
   });
 
   // ─── Register Resources ───

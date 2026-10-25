@@ -3,6 +3,21 @@
 Tất cả thay đổi đáng chú ý của `story-architect-mcp` được ghi lại ở đây.
 Format theo [Keep a Changelog](https://keepachangelog.com/), version theo [SemVer](https://semver.org/).
 
+## [0.7.0] — 2026-10-25
+
+Đợt P5: phân tích bố cục bằng AI thay vì quy chế硬 cứng ("AI in-the-loop"). Regex v0.6.0 là lưới an toàn; AI (agent đang gọi MCP) đọc ngữ cảnh để nhận diện bố cục quirky — chương không từ khóa ("I. Mở màn", "Ngày 17-3"), tên file tự đặt ("01.txt"), truyện thư từ/ngày tháng, nhiều tiểu thuyết xen nhau. Thêm 2 tool (30 → 32), không thêm dependency.
+
+### Added
+- **`story_export_layout_brief` (tool #31)**: gói bằng chứng thô của dự án — cây file + số từ + trích 10 dòng đầu mỗi file + heuristic profile (đánh dấu "quy tắc cứng, có thể sai") + các heading regex đã/bỏ sót — cho AI phân tích bằng ngữ cảnh, không cần quy tắc.
+- **`story_apply_layout_verdict` (tool #32)**: AI nộp phán đoán JSON: `kind`, `confidence`, `reasoning` (bằng chứng đọc được), `chapters` [{file, title?, number?, startLine(1-based)}], `arcs` [{fromDir, arc_XX}], `files` [{path, destination?, reason?}]. Server xác thực nghiêm ngặt — path phải nằm trong dự án (chặn `..`, absolute, `.story/`), destination giới hạn trong `manuscript/ | bible/ | outline/ | drafts_raw/`, startLine phải ≤ số dòng file — rồi lưu `.story/layout-verdict.json`.
+- **Verdict AI ưu tiên trong `story_auto_refactor_structure` (auto_profile)**: tách single-file theo ranh giới chương AI chỉ (regex không cần từ khóa "Chương"); map thư mục arc AI chọn — mọi file trong thư mục là bản thảo theo phán đoán AI; định danh mục trực tiếp từng file. Cross-check heuristic: lệch kind → note ⚠️ trong preview để kiểm chứng. Không có verdict → fallback heuristic v0.6.0 như cũ (kèm tip luồng AI).
+- **`story_scan_messy_project`** hiển thị mục 🧠 phán đoán AI (kèm so khớp heuristic) hoặc tip luồng AI nếu chưa áp. Xóa `.story/layout-verdict.json` để quay về quy tắc.
+- **Test mới**: `test/aiLayout.test.ts` (5 test — brief/verdict quirks/invalid reject/scan) — 173 unit tests tổng cộng (từ 168).
+
+### Notes
+- An toàn không đổi: dry-run preview trước, auto-snapshot trước confirm; verdict AI chỉ địa điểm, server thực thi và xác thực.
+- smoke-stdio kỳ vọng **32 tools**.
+
 ## [0.6.0] — 2026-10-25
 
 Đợt P4: nhận diện bố cục đa dạng cho tiểu thuyết có trước khi cài tool (nhiều người viết, nhiều dự án, bố trí khác nhau). Không thêm tool, không thêm dependency.

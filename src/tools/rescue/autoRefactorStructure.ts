@@ -10,9 +10,13 @@ import {
   proposeChapterFilename, subdirToArc,
   type FileInfoInput as LayoutFileInfo,
 } from '../../utils/layoutDetect.js';
+import { loadLayoutVerdict, normalizeRel, type VerdictChapterSchema } from './aiLayout.js';
 import type { RefactorAction } from '../../server/types.js';
 import { createSnapshot } from './snapshot.js';
 import { errResult } from '../../utils/mcpResults.js';
+
+/** Chỉ định ranh giới chương do AI nộp (1-based startLine). */
+type ChapterSpec = z.infer<typeof VerdictChapterSchema>;
 
 /**
  * Đoán số arc từ tên file hoặc đầu nội dung ("arc 2", "quyển 3", "hồi 1"...).
@@ -107,6 +111,58 @@ async function splitAndWriteChapters(
     written.push(path.relative(projectPath, destFull));
   }
   return { written, chapterCount: headings.length };
+}
+
+/**
+ * v0.7.0 — Tách file theo RANH GIỚI CHƯƠNG do AI nộp (verdict), không phụ
+ * thuộc regex heading. AI có thể bắt chương không từ khóa: "I. Mở màn",
+ * "Ngày 17-3", dòng trắng ngắt đoạn... startLine là số dòng (1-based).
+ */
+async function splitAndWriteChaptersFromSpecs(
+  projectPath: string,
+  srcRel: string,
+  specsRaw: ChapterSpec[],
+): Promise<{ written: string[]; chapterCount: number } | { error: string }> {
+  const content = (await readTextFile(path.join(projectPath, srcRel))) || '';
+  const lines = content.replace(/\r\n?/g, '\n').split('\n');
+  // Ranh giới phải tăng dần và nằm trong file (xác thực chặn trước được,
+  // nhưng AI dashboard có thể sửa tay — kiểm tra lần nữa cho chắc)
+  const sorted = [...specsRaw].sort((a, b) => a.startLine - b.startLine);
+  const uniq = sorted.filter((s, i) => i === 0 || s.startLine > sorted[i - 1].startLine);
+  if (uniq.length < 2) {
+    return { error: 'Verdict cần ≥2 ranh giới chương (startLine tăng dần)' };
+  }
+
+  const arcDir = path.join(projectPath, 'manuscript', 'arc_01');
+  await fs.mkdir(arcDir, { recursive: true });
+
+  const written: string[] = [];
+  const usedNums = new Set<number>();
+
+  for (let h = 0; h < uniq.length; h++) {
+    const spec = uniq[h];
+    const startIdx = spec.startLine - 1; // 0-based
+    const endIdx = h + 1 < uniq.length ? uniq[h + 1].startLine - 1 : lines.length;
+    const title = (spec.title || lines[startIdx] || `Chương ${spec.number ?? h + 1}`).trim();
+    let body = lines.slice(startIdx + 1, endIdx).join('\n').trim();
+    const preface = h === 0 ? lines.slice(0, startIdx).join('\n').trim() : '';
+    if (preface) body = preface ? `${preface}\n\n${body}` : body;
+
+    let num = spec.number ?? null;
+    if (num === null || usedNums.has(num)) num = h + 1;
+    usedNums.add(num);
+
+    const filename = proposeChapterFilename(num, h + 1);
+    let destFull = path.join(arcDir, filename);
+    if (await exists(destFull)) {
+      let n = 2;
+      while (await exists(path.join(arcDir, filename.replace('.md', `_${n}.md`)))) n++;
+      destFull = path.join(arcDir, filename.replace('.md', `_${n}.md`));
+    }
+    await writeTextFileAtomic(destFull, `${title}\n\n${body}\n`);
+    written.push(path.relative(projectPath, destFull));
+  }
+  return { written, chapterCount: uniq.length };
 }
 
 function determineDestination(
@@ -269,7 +325,34 @@ export function registerAutoRefactorTool(server: McpServer, getProject: () => St
       let splitHeadingCount = 0;
       let arcByDir = new Map<string, string>();
       let profileNote = '';
-      if (strategy === 'auto_profile') {
+
+      // v0.7.0 — Phán đoán AI (story_apply_layout_verdict) UY TIÊN trên heuristic
+      const verdict = strategy === 'auto_profile' ? await loadLayoutVerdict(projectPath) : null;
+      /** Ranh giới chương do AI nộp, group theo file (split theo chỉ định AI). */
+      const verdictSplits = new Map<string, ChapterSpec[]>();
+      /** Định danh mục file do AI nộp (move trực tiếp / skip). */
+      const verdictFileActions = new Map<string, { destination?: string; reason?: string }>();
+      if (verdict) {
+        const v = verdict.verdict;
+        const disagree = verdict.heuristicKind !== v.kind;
+        profileNote = `Phán đoán AI (lưu ${verdict.appliedAt.slice(0, 10)}): ${v.kind} — ${v.reasoning.slice(0, 220)}${disagree ? ` ⚠️ LỆCH heuristic (heuristic: ${verdict.heuristicKind}) — preview để bạn kiểm chứng.` : ''}`;
+        for (const c of v.chapters ?? []) {
+          const rel = normalizeRel(c.file);
+          if (!verdictSplits.has(rel)) verdictSplits.set(rel, []);
+          verdictSplits.get(rel)!.push(c);
+        }
+        for (const f of v.files ?? []) {
+          verdictFileActions.set(normalizeRel(f.path), { destination: f.destination, reason: f.reason });
+        }
+        for (const a of v.arcs ?? []) {
+          arcByDir.set(normalizeRel(a.fromDir), a.arc);
+        }
+        if (verdictSplits.size === 0 && v.kind === 'arc_folders' && arcByDir.size === 0) {
+          effectiveStrategy = 'by_arc'; // phán đoán AI kiểu arc nhưng không map cụ thể → fallback heuristic
+        }
+      }
+
+      if (strategy === 'auto_profile' && !verdict) {
         const readOnce = async (file: string): Promise<string> => {
           const ext = path.extname(file).toLowerCase();
           if (ext === '.doc' || ext === '.rtf') return '';
@@ -316,6 +399,30 @@ export function registerAutoRefactorTool(server: McpServer, getProject: () => St
       for (const file of orderedFiles) {
         const ext = path.extname(file).toLowerCase();
         const relPath = path.relative(projectPath, file);
+        // ── v0.7.0: phán đoán AI ưu tiên — (1) split theo ranh giới AI ──
+        if (strategy === 'auto_profile' && verdictSplits.has(normalizeRel(relPath))) {
+          const nChapters = verdictSplits.get(normalizeRel(relPath))!.length;
+          actions.push({
+            type: 'split',
+            source: relPath,
+            destination: path.join('drafts_raw', path.basename(relPath)),
+            reason: `Tách ${nChapters} chương theo ranh giới AI xác định → manuscript/arc_01/ch_XXX.md; bản gốc giữ lại ở drafts_raw/`,
+            chapterCount: nChapters,
+          });
+          continue;
+        }
+        if (strategy === 'auto_profile' && verdictFileActions.has(normalizeRel(relPath))) {
+          const vf = verdictFileActions.get(normalizeRel(relPath))!;
+          actions.push({
+            type: vf.destination ? 'move' : 'skip',
+            source: relPath,
+            destination: vf.destination ?? relPath,
+            reason: vf.reason || 'Phân loại theo phán đoán AI',
+          });
+          if (vf.destination) seq++;
+          continue;
+        }
+        // ── (2) split heuristic (không có verdict AI) ──
         if (strategy === 'auto_profile' && splitSource && relPath === splitSource) {
           actions.push({
             type: 'split',
@@ -328,6 +435,22 @@ export function registerAutoRefactorTool(server: McpServer, getProject: () => St
         }
         const content = (ext === '.doc' || ext === '.rtf') ? '' : (await readTextFile(file) || '');
         let action: RefactorAction;
+        // ── v0.7.0: thư mục được AI map → mọi file trong đó là bản thảo
+        // (AI đã phán đoán; heuristic keyword chỉ là fallback khi không có AI)
+        const aiArc = strategy === 'auto_profile'
+          ? arcByDir.get(normalizeRel(relPath.split(/[/\\]/)[0]))
+          : undefined;
+        if (aiArc) {
+          actions.push({
+            type: 'move',
+            source: relPath,
+            destination: path.join('manuscript', aiArc, path.basename(relPath)),
+            reason: `Chương trong thư mục "${relPath.split(/[/\\]/)[0]}" → manuscript/${aiArc}/ (theo phán đoán AI về map thư mục)`,
+          });
+          seq++;
+          continue;
+        }
+        // ── (4) heuristic map thư mục (không có verdict AI cho dir này) ──
         if (strategy === 'auto_profile' && effectiveStrategy === 'by_arc' && arcByDir.size > 0) {
           action = determineDestinationArcFolders(relPath, content, arcByDir)
             ?? determineDestination(relPath, content, 'by_chapter', seq);
@@ -368,7 +491,7 @@ ${splitCount > 0 ? `  ├── ✂️ Tách file lớn: ${splitCount}\n` : ''} 
 ${preview}
 
 ⚠️ Đây là preview. Để thực hiện, gọi lại với confirm: true.
-💡 Hệ thống sẽ tự động tạo snapshot trước khi di chuyển file.`,
+💡 Hệ thống sẽ tự động tạo snapshot trước khi di chuyển file.${strategy === 'auto_profile' && !verdict ? '\n🤖 Muốn chính xác hơn bằng AI (ví dụ chương không có từ khóa "chương"): story_export_layout_brief → AI nộp story_apply_layout_verdict → gọi lại tool này.' : ''}`,
           }],
         };
       }
@@ -410,7 +533,11 @@ ${preview}
         // ✂️ SPLIT (v0.6.0): viết các ch_XXX.md mới rồi đưa bản gốc vào drafts_raw
         if (action.type === 'split') {
           try {
-            const result = await splitAndWriteChapters(projectPath, action.source);
+            // v0.7.0: ranh giới do AI nộp → tách theo verdict; không thì regex
+            const specs = verdictSplits.get(normalizeRel(action.source));
+            const result = specs
+              ? await splitAndWriteChaptersFromSpecs(projectPath, action.source, specs)
+              : await splitAndWriteChapters(projectPath, action.source);
             if ('error' in result) {
               errors.push(`  ❌ ${action.source}: ${result.error}`);
               continue;

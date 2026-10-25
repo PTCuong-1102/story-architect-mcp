@@ -393,7 +393,7 @@ ${paragraphs.join('\n')}
       data: Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
   <Application>story-architect-mcp</Application>
-  <AppVersion>0.6.0</AppVersion>
+  <AppVersion>0.7.0</AppVersion>
   <Words>${wordCount}</Words>
 </Properties>
 `),
