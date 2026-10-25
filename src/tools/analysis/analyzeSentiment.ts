@@ -90,10 +90,18 @@ export function registerAnalyzeSentimentTool(server: McpServer, getProject: () =
           arcSummary = `\n⚡ Polarity xuyên suốt: ${arcPoints.map(p => p.polarity.toFixed(2)).join(' → ')}`;
         }
 
+        // Cảnh báo minh bạch: engine là lexicon-based — văn giàu ẩn dụ/nghị đảo
+        // (coverage quá thấp) có thể bị đọc lệch polarity. Ghi rõ để tác giả
+        // không tâm linh hóa con số.
+        const coverageNote = result.coverage < 0.05
+          ? `\n  ⚠️ Coverage thấp (<5%) — văn bản ít từ cảm xúc khớp lexicon. Kết quả có thể bỏ qua ẩn dụ, nghị đảo, ngôn ngữ hình tượng. Nên kiểm tra bằng đọc trực tiếp.`
+          : '';
+
         return `### Chương: ${ch}
 📊 Sentiment: Polarity = ${result.polarity.toFixed(2)} (${polarityLabel(result.polarity)})
 🎭 Giọng văn: ${toneLabel}
 🔍 Từ cảm xúc: ${result.sentimentWordCount}/${result.totalWords} (${(result.coverage * 100).toFixed(1)}% coverage)
+${coverageNote}
 
 🎨 Phân bổ cảm xúc:
 ${formatAllEmotions(result.emotions)}
@@ -178,6 +186,7 @@ ${arcSummary}
 - 🎭 **Giọng văn chủ đạo**: ${overallToneLabel}
 - 📊 **Polarity trung bình**: ${avgPolarity.toFixed(2)} (${polarityLabel(avgPolarity)})
 - 🎨 **Cảm xúc nổi bật**: ${overallResult.dominantEmotion.charAt(0).toUpperCase() + overallResult.dominantEmotion.slice(1)}
+- 🧮 **Phương pháp**: lexicon-v2 (thuần từ vựng, không semantic — khoảng 8 tone, hỗ trợ phủ định/tăng cường/teencode)${overallResult.coverage < 0.05 ? '\n- ⚠️ **Coverage tổng toàn Arc < 5%** — kết quả lexical có thể không đáng tin với văn nhiều ẩn dụ. Cân nhắc đọc trực tiếp hoặc dùng LLM phân tích.' : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

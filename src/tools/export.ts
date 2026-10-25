@@ -129,11 +129,13 @@ function buildEpubEntries(title: string, author: string, language: string, chapt
       name: 'OEBPS/content.opf',
       data: Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:epub="http://www.idpf.org/2007/ops">
     <dc:identifier id="bookid">urn:uuid:${bookId}</dc:identifier>
     <dc:title>${escapeXml(title)}</dc:title>
     ${author ? `<dc:creator>${escapeXml(author)}</dc:creator>` : ''}
     <dc:language>${escapeXml(language)}</dc:language>
+    <dc:description>Xuất bản bởi story-architect-mcp</dc:description>
+    <meta property="dcterms:modified">${new Date().toISOString().replace(/\.\d+Z$/, 'Z')}</meta>
   </metadata>
   <manifest>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
@@ -169,8 +171,9 @@ function buildEpubEntries(title: string, author: string, language: string, chapt
     },
     {
       name: 'OEBPS/style.css',
-      data: Buffer.from(`body { font-family: serif; line-height: 1.6; margin: 1em; }
-h1, h2, h3 { line-height: 1.3; }
+      data: Buffer.from(`body { font-family: serif; line-height: 1.6; margin: 1em; text-align: justify; hyphens: auto; -webkit-hyphens: auto; -epub-hyphens: auto; }
+h1, h2, h3 { line-height: 1.3; text-align: left; page-break-after: avoid; }
+section + section { page-break-before: always; }
 blockquote { margin-left: 1em; color: #555; }
 pre { white-space: pre-wrap; }
 `),
@@ -194,11 +197,15 @@ ${bodySections}
 }
 
 /** Tạo các entry của DOCX (WordprocessingML tối giản). */
-function buildDocxEntries(title: string, chapters: ChapterContent[], outlineMd = ''): { name: string; data: Buffer; deflate?: boolean }[] {
+function buildDocxEntries(title: string, author: string, language: string, wordCount: number, chapters: ChapterContent[], outlineMd = ''): { name: string; data: Buffer; deflate?: boolean }[] {
   const paragraphs: string[] = [];
   const pushParagraph = (text: string, style?: string) => {
     const pPr = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : '';
     paragraphs.push(`<w:p>${pPr}<w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`);
+  };
+  /** Ngắt trang (kết thúc chương / tùy chọn binding) — giữ sạch layout in ấn. */
+  const pushPageBreak = () => {
+    paragraphs.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
   };
   const pushMarkdownBlock = (md: string) => {
     for (const line of md.split('\n')) {
@@ -216,11 +223,13 @@ function buildDocxEntries(title: string, chapters: ChapterContent[], outlineMd =
 
   pushParagraph(title, 'Title');
   for (const c of chapters) {
+    if (paragraphs.length > 1) pushPageBreak(); // mỗi chương bắt đầu ở trang mới
     pushParagraph(c.chapter, 'Heading1');
     pushMarkdownBlock(c.content);
   }
 
   if (outlineMd) {
+    pushPageBreak();
     pushParagraph('Dàn ý (Outline)', 'Heading1');
     pushMarkdownBlock(outlineMd);
   }
@@ -246,6 +255,7 @@ ${paragraphs.join('\n')}
   <Default Extension="xml" ContentType="application/xml"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
 </Types>
 `),
     },
@@ -255,6 +265,7 @@ ${paragraphs.join('\n')}
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
   <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
 </Relationships>
 `),
     },
@@ -277,6 +288,8 @@ ${paragraphs.join('\n')}
   <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
     <w:name w:val="Normal"/>
     <w:qFormat/>
+    <w:pPr><w:jc w:val="both"/><w:ind w:firstLine="567"/></w:pPr>
+    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/></w:rPr>
   </w:style>
   <w:style w:type="paragraph" w:styleId="Title">
     <w:name w:val="Title"/>
@@ -308,9 +321,22 @@ ${paragraphs.join('\n')}
     {
       name: 'docProps/core.xml',
       data: Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/">
   <dc:title>${escapeXml(title)}</dc:title>
+  ${author ? `<dc:creator>${escapeXml(author)}</dc:creator>` : ''}
+  <dc:language>${escapeXml(language)}</dc:language>
+  <dcterms:modified>${new Date().toISOString().replace(/\.\d+Z$/, 'Z')}</dcterms:modified>
 </cp:coreProperties>
+`),
+    },
+    {
+      name: 'docProps/app.xml',
+      data: Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
+  <Application>story-architect-mcp</Application>
+  <AppVersion>0.3.0</AppVersion>
+  <Words>${wordCount}</Words>
+</Properties>
 `),
     },
     { name: 'word/document.xml', data: Buffer.from(documentXml) },
@@ -398,7 +424,7 @@ export function registerExportTool(server: McpServer, getProject: () => StoryPro
           break;
         }
         case 'docx': {
-          const entries = buildDocxEntries(config.name, chapters, outlineMd)
+          const entries = buildDocxEntries(config.name, config.author, language, status.totalWordCount, chapters, outlineMd)
             .map(e => ({ ...e, deflate: true }));
           await fs.writeFile(outputPath, createZip(entries));
           break;

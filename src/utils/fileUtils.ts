@@ -13,12 +13,123 @@ export async function readJsonFile<T>(filePath: string): Promise<T | null> {
   }
 }
 
+// ============================================================
+// Atomic write + Advisory file lock (anti-race cho .story/*.json)
+// ============================================================
+
 /**
- * Ghi file JSON với pretty-print.
+ * Ghi file nguyên tử: ghi vào file tạm cùng thư mục (cùng filesystem →
+ * rename rẻ và nguyên tử) rồi rename đè lên file đích.
+ *
+ * Garanti: reader (fs.readFile) luôn thấy TRỌN VẸN nội dung cũ hoặc mới,
+ * không bao giờ file cắt nửa chừng khi process sập giữa chừng ghi.
+ * File tạm được dọn sạch kể cả khi thao tác lỗi.
+ */
+export async function writeTextFileAtomic(filePath: string, text: string): Promise<void> {
+  const tmp = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+  try {
+    await fs.writeFile(tmp, text, 'utf-8');
+    await fs.rename(tmp, filePath);
+  } catch (error) {
+    try { await fs.unlink(tmp); } catch { /* tmp chưa kịp tạo */ }
+    throw error;
+  }
+}
+
+/**
+ * Ghi file JSON với pretty-print (nguyên tử — xem writeTextFileAtomic).
  */
 export async function writeJsonFile(filePath: string, data: unknown): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(data, null, 2) + '\n', 'utf-8');
+  await writeTextFileAtomic(filePath, JSON.stringify(data, null, 2) + '\n');
+}
+
+export interface FileLockOptions {
+  /** Tổng thời gian tối đa chờ khoá (ms) trước khi báo lỗi. */
+  timeoutMs?: number;
+  /** Khoá "stale" cũ hơn TTL này (ms) sẽ bị mượn (process chủ có thể đã sập). */
+  staleTtlMs?: number;
+}
+
+const DEFAULT_LOCK_TIMEOUT = 10_000;
+const DEFAULT_STALE_TTL = 15_000;
+const LOCK_RETRY_DELAY = 25;
+
+/** Mutex nội bộ: serialize các lock cùng path trong cùng process (tool call song song). */
+const inProcessLocks = new Map<string, Promise<unknown>>();
+
+/** Đường dẫn khoá on-disk cho một file dữ liệu: cùng thư mục cha, tên `.lock-dir`. */
+export function lockPathFor(filePath: string): string {
+  return `${filePath}.lock-dir`;
+}
+
+/**
+ * Advisory lock 2 tầng cho một vùng read-modify-write.
+ *
+ * - Tầng in-process: mutex Map — các call cùng server instance chạy tuần tự
+ *   ngay lập tức (không chờ fs).
+ * - Tầng on-disk: `fs.mkdir` trên `<file>.lock-dir` là nguyên tử trên POSIX
+ *   lẫn Windows → cross-process an toàn. Khoá stale > staleTtlMs bị mượn.
+ *   Chờ quá timeoutMs → throw (fail-fast, không treo server).
+ *
+ * Dùng cho mọi thao tác read-modify-write trên state JSON (`StoryProject.save*`).
+ * Read thuần KHÔNG cần lock vì write đã nguyên tử (rename).
+ */
+export async function withFileLock<T>(
+  lockPath: string,
+  fn: () => Promise<T>,
+  options: FileLockOptions = {},
+): Promise<T> {
+  const prev = inProcessLocks.get(lockPath) ?? Promise.resolve();
+
+  const guarded = async (): Promise<T> => {
+    await acquireDirLock(lockPath, options);
+    try {
+      return await fn();
+    } finally {
+      await fs.rm(lockPath, { recursive: true, force: true }).catch(() => { /* ok */ });
+    }
+  };
+
+  const task = prev.then(() => guarded(), () => guarded());
+  const guard = task.then(() => { }, () => { }); // promise "gác cổng" — lỗi không lan sang task kế
+  inProcessLocks.set(lockPath, guard);
+  guard.then(() => { if (inProcessLocks.get(lockPath) === guard) inProcessLocks.delete(lockPath); });
+  return task;
+}
+
+async function acquireDirLock(lockPath: string, options: FileLockOptions): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_LOCK_TIMEOUT;
+  const staleTtlMs = options.staleTtlMs ?? DEFAULT_STALE_TTL;
+  const deadline = Date.now() + timeoutMs;
+
+  await fs.mkdir(path.dirname(lockPath), { recursive: true });
+
+  for (;;) {
+    try {
+      await fs.mkdir(lockPath); // nguyên tử — trúng = chiếm được khoá
+      return;
+    } catch {
+      // Đã có khoá: kiểm tra stale cũ hơn TTL → mượn
+      try {
+        const stat = await fs.stat(lockPath);
+        if (Date.now() - stat.mtimeMs > staleTtlMs) {
+          // Mượn: rm rồi mkdir ngay sau đó — có thể thua cho process khác
+          // (mkdir dưới sẽ quyết định ai thắng).
+          await fs.rm(lockPath, { recursive: true, force: true }).catch(() => { });
+          try {
+            await fs.mkdir(lockPath);
+            return;
+          } catch { /* ai đó chiếm trước — vòng lặp tiếp */ }
+        }
+      } catch { /* khoá vừa được giải phóng — thử lại */ }
+
+      if (Date.now() >= deadline) {
+        throw new Error(`⏳ Không chiếm được file lock sau ${timeoutMs}ms: ${lockPath}. Có process khác đang ghi — thử lại sau.`);
+      }
+      await new Promise(res => setTimeout(res, LOCK_RETRY_DELAY));
+    }
+  }
 }
 
 /**

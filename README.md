@@ -12,6 +12,16 @@
 
 ---
 
+## 🆕 What's New in v0.3.0
+
+* **Atomic Writes + Advisory File Locking**: Every `.story/*.json` state file is written atomically (temp-file + rename — readers never see a half-written file), and all read-modify-write operations are serialized through a two-layer lock (in-process mutex + on-disk lock dir with stale-TTL and fail-fast timeout). Safe for multiple MCP clients writing to the same novel.
+* **Project Registry & `story_list_projects`**: Server now reuses `StoryProject` instances across switches, and a new tool lists every project opened in the session.
+* **Diacritics-insensitive + Fuzzy Graph Matching**: Character/relationship lookups normalize Vietnamese diacritics (`Trăng` ≡ `trang`) and fall back to Levenshtein fuzzy match (±1–2 characters) — queries mistyped by the LLM still resolve.
+* **Transparent Lexical Analysis**: `story_analyze_sentiment` now reports its method (`lexicon-v2`) and warns when coverage is too low to trust metaphorical/ironic readings.
+* **Richer EPUB/DOCX Export**: EPUB3 gains `dcterms:modified`, richer CSS (justified text, hyphenation, per-section page breaks); DOCX gains page breaks between chapters, justified Normal style, full `docProps` (creator, language, app info), and Times New Roman typography.
+
+---
+
 ## ✨ Key Features
 
 ### 🧹 1. Messy Project Rescue & Auto-Refactoring
@@ -121,12 +131,13 @@ Nếu bạn muốn cấu hình thủ công thay vì chạy `npx story-architect-
 
 ## 🛠️ MCP API Reference
 
-### 1. MCP Tools (28 Tools)
+### 1. MCP Tools (29 Tools)
 
 #### 🔹 Project & Structure Management
 | Tool Name | Key Parameters | Description |
 |---|---|---|
 | `story_set_project` | `projectPath` | Sets or switches the target novel project directory dynamically at runtime. |
+| `story_list_projects` | *none* | Lists all novel projects opened in this server session (parameter v0.3.0 — project registry + instance reuse). |
 | `story_get_project_info` | *none* | Returns status, path, configuration, and word count of the active project. |
 | `story_init` | `template`, `title`, `author`, `genre`, `pov`, `tense` | Initializes project directory with predefined genre templates. |
 | `story_stats` | *none* | Computes total manuscript word count, writing velocity, and estimated completion date. |

@@ -158,7 +158,52 @@ export function registerProjectManagerTools(
   setProject: (projectPath: string) => StoryProject,
   getProject: () => StoryProject | null,
   getCurrentPath: () => string | null,
+  listProjects?: () => Promise<Array<{ path: string; name: string; initialized: boolean; active: boolean }>>,
 ): void {
+
+  // ─── story_list_projects ───
+  server.registerTool(
+    'story_list_projects',
+    {
+      title: 'List Session Projects',
+      description: 'Liệt kê mọi dự án tiểu thuyết đã mở trong phiên server (kèm trạng thái khởi tạo và dự án đang active). Dùng story_set_project để chuyển đổi.',
+      inputSchema: z.object({}),
+    },
+    async () => {
+      let projects = listProjects ? await listProjects() : [];
+      if (projects.length === 0) {
+        // Fallback cho đăng ký độc lập (không có registry): hiểu ngầm 1 dự án active
+        try {
+          const current = getProject();
+          if (current) {
+            projects = [{
+              path: current.projectPath,
+              name: path.basename(current.projectPath),
+              initialized: await current.isInitialized(),
+              active: true,
+            }];
+          }
+        } catch { /* chưa set project — hiển thị empty message */ }
+      }
+      if (projects.length === 0) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `📂 Chưa có dự án nào được mở trong phiên.\n\n💡 Gọi \`story_set_project\` với đường dẫn đến thư mục dự án (hoặc khởi động server với đối số đường dẫn).`,
+          }],
+        };
+      }
+      const lines = projects.map(p =>
+        `${p.active ? '🟢' : '⚪'} **${p.name}**${p.active ? ' (active)' : ''}\n   📁 ${p.path}\n   ${p.initialized ? '✅ Đã khởi tạo' : '⚠️ Chưa khởi tạo — gọi story_init'}`
+      ).join('\n');
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `🗂️ Dự án trong phiên này (${projects.length}):\n\n${lines}\n\n💡 Chuyển dự án: story_set_project({ projectPath: "<đường dẫn>" }) — instance được tái sử dụng nên không mất index/cache đã dựng.`,
+        }],
+      };
+    }
+  );
 
   // ─── story_set_project ───
   server.registerTool(

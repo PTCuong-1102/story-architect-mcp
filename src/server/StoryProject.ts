@@ -9,6 +9,8 @@ import {
   findMarkdownFiles,
   isSafePathSegment,
   compareNatural,
+  withFileLock,
+  lockPathFor,
 } from '../utils/fileUtils.js';
 import { countWords } from '../utils/wordCount.js';
 import {
@@ -88,11 +90,15 @@ export class StoryProject {
   }
 
   async saveConfig(config: Partial<StoryConfig>): Promise<StoryConfig> {
-    const current = await this.getConfig();
-    const merged = { ...current, ...config, updatedAt: new Date().toISOString() };
-    const validated = StoryConfigSchema.parse(merged);
-    await writeJsonFile(this.configPath(), validated);
-    return validated;
+    // Read-modify-write trên file trạng thái → luôn qua advisory lock
+    // (atomic write bảo vệ read; lock bảo vệ race giữa các ghi).
+    return withFileLock(lockPathFor(this.configPath()), async () => {
+      const current = await this.getConfig();
+      const merged = { ...current, ...config, updatedAt: new Date().toISOString() };
+      const validated = StoryConfigSchema.parse(merged);
+      await writeJsonFile(this.configPath(), validated);
+      return validated;
+    });
   }
 
   // ====== Status ======
@@ -122,8 +128,10 @@ export class StoryProject {
   }
 
   async saveStatus(status: Partial<StoryStatus>): Promise<void> {
-    const current = await this.getStatus();
-    await writeJsonFile(this.statusPath(), { ...current, ...status });
+    await withFileLock(lockPathFor(this.statusPath()), async () => {
+      const current = await this.getStatus();
+      await writeJsonFile(this.statusPath(), { ...current, ...status });
+    });
   }
 
   /**
@@ -134,6 +142,13 @@ export class StoryProject {
    * (đọc stats không còn side-effect).
    */
   async recordWritingProgress(chapterRef?: string): Promise<StoryStatus> {
+    // Public API luôn có lock: read-modify-write nguyên khối trên
+    // status.json — chạy song song nhiều tool call cùng lúc vẫn không
+    // mất entry writingLog (race giữa hai bản ghi cùng ngày).
+    return withFileLock(lockPathFor(this.statusPath()), () => this.recordWritingProgressInner(chapterRef));
+  }
+
+  private async recordWritingProgressInner(chapterRef?: string): Promise<StoryStatus> {
     const raw = await readJsonFile<unknown>(this.statusPath());
     const stored = raw ? StoryStatusSchema.parse(raw) : StoryStatusSchema.parse({});
     const currentWordCount = await this.calculateTotalWordCount();
@@ -188,7 +203,9 @@ export class StoryProject {
   }
 
   async saveTimeline(timeline: Timeline): Promise<void> {
-    await writeJsonFile(this.timelinePath(), { ...timeline, updatedAt: new Date().toISOString() });
+    await withFileLock(lockPathFor(this.timelinePath()), async () => {
+      await writeJsonFile(this.timelinePath(), { ...timeline, updatedAt: new Date().toISOString() });
+    });
   }
 
   // ====== Character States & Inventory ======
@@ -199,7 +216,9 @@ export class StoryProject {
   }
 
   async saveCharacterStates(data: CharacterStatesFile): Promise<void> {
-    await writeJsonFile(this.characterStatesPath(), { ...data, updatedAt: new Date().toISOString() });
+    await withFileLock(lockPathFor(this.characterStatesPath()), async () => {
+      await writeJsonFile(this.characterStatesPath(), { ...data, updatedAt: new Date().toISOString() });
+    });
   }
 
   async getLatestCharacterState(characterName: string): Promise<CharacterStateSnapshot | null> {
@@ -217,7 +236,9 @@ export class StoryProject {
   }
 
   async savePlotHoles(data: PlotHolesFile): Promise<void> {
-    await writeJsonFile(this.holesPath(), { ...data, updatedAt: new Date().toISOString() });
+    await withFileLock(lockPathFor(this.holesPath()), async () => {
+      await writeJsonFile(this.holesPath(), { ...data, updatedAt: new Date().toISOString() });
+    });
   }
 
   // ====== Foreshadowing ======
@@ -228,7 +249,9 @@ export class StoryProject {
   }
 
   async saveForeshadowing(data: ForeshadowingFile): Promise<void> {
-    await writeJsonFile(this.foreshadowingPath(), { ...data, updatedAt: new Date().toISOString() });
+    await withFileLock(lockPathFor(this.foreshadowingPath()), async () => {
+      await writeJsonFile(this.foreshadowingPath(), { ...data, updatedAt: new Date().toISOString() });
+    });
   }
 
   // ====== Relationships ======
@@ -239,7 +262,9 @@ export class StoryProject {
   }
 
   async saveRelationships(data: RelationshipsFile): Promise<void> {
-    await writeJsonFile(this.relationshipsPath(), { ...data, updatedAt: new Date().toISOString() });
+    await withFileLock(lockPathFor(this.relationshipsPath()), async () => {
+      await writeJsonFile(this.relationshipsPath(), { ...data, updatedAt: new Date().toISOString() });
+    });
   }
 
   // ====== Style Guide ======
@@ -250,7 +275,9 @@ export class StoryProject {
   }
 
   async saveStyleGuide(data: StyleGuide): Promise<void> {
-    await writeJsonFile(this.styleGuidePath(), { ...data, updatedAt: new Date().toISOString() });
+    await withFileLock(lockPathFor(this.styleGuidePath()), async () => {
+      await writeJsonFile(this.styleGuidePath(), { ...data, updatedAt: new Date().toISOString() });
+    });
   }
 
   // ====== Characters ======
@@ -499,7 +526,9 @@ export class StoryProject {
   }
 
   async saveSentimentCache(data: SentimentCache): Promise<void> {
-    await writeJsonFile(this.emotionsCachePath(), { ...data, analyzedAt: new Date().toISOString() });
+    await withFileLock(lockPathFor(this.emotionsCachePath()), async () => {
+      await writeJsonFile(this.emotionsCachePath(), { ...data, analyzedAt: new Date().toISOString() });
+    });
   }
 
   // ====== Snapshots Dir ======

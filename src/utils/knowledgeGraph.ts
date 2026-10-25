@@ -68,6 +68,48 @@ function normalize(s: string): string {
   return s.toLowerCase().trim().replace(/\s+/g, ' ');
 }
 
+/**
+ * Khoá "không dấu" dùng cho đồ thị & search:
+ * NFD + strip combining marks + đ→d + lowercase.
+ * "Trăng" ≡ "trang", "Linh Hồn" ≡ "linh hon" — alias gõ thiếu dấu vẫn khớp.
+ */
+function normalizeKey(s: string): string {
+  return normalize(s)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+}
+
+/** Khoảng cách Levenshtein (DP cột đơn — O(min(m,n)) bộ nhớ). */
+export function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  let prev = new Array(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    const curr = [i];
+    for (let j = 1; j <= b.length; j++) {
+      curr[j] = Math.min(
+        prev[j] + 1,
+        curr[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = curr;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Fuzzy threshold: cho phép sai khác ký tự phụ thuộc độ dài tên
+ * (tên ≥4 ký tự sai 1, ≥8 ký tự sai tới 2) — phủ chính tả sai/viết tắt.
+ */
+function fuzzyMatches(a: string, b: string): boolean {
+  const maxDist = Math.min(2, Math.floor(Math.min(a.length, b.length) / 4));
+  return maxDist >= 1 && levenshtein(a, b) <= maxDist;
+}
+
 /** Số token trùng giữa query và danh sách terms của thực thể. */
 function termOverlap(query: string, terms: string[]): number {
   const qTokens = extractTerms(query);
@@ -171,22 +213,28 @@ export interface EntityMatch {
 
 /** Tìm kiếm thực thể (nhân vật / bối cảnh) khớp với query. */
 export function searchEntities(index: KnowledgeGraphIndex, query: string): EntityMatch[] {
-  const q = normalize(query);
+  const q = normalizeKey(query);
   const results: EntityMatch[] = [];
 
   for (const c of index.characters) {
+    const nameKey = normalizeKey(c.name);
+    const aliasKeys = c.aliases.map(normalizeKey);
     let score = 0;
-    if (normalize(c.name) === q) score = 1.0;
-    else if (normalize(c.name).includes(q) || q.includes(normalize(c.name))) score = 0.8;
-    else if (c.aliases.some(a => normalize(a) === q || normalize(a).includes(q) || q.includes(normalize(a)))) score = 0.6;
+    if (nameKey === q) score = 1.0;
+    else if (nameKey.includes(q) || q.includes(nameKey)) score = 0.8;
+    else if (aliasKeys.some(a => a === q || a.includes(q) || q.includes(a))) score = 0.6;
+    // Fuzzy Levenshtein: query sai chính tả/thiếu dấu vẫn khớp (score 0.5)
+    else if (q.length >= 4 && (fuzzyMatches(nameKey, q) || aliasKeys.some(a => fuzzyMatches(a, q)))) score = 0.5;
     else score = Math.min(0.4, termOverlap(query, c.terms) * 0.15);
     if (score > 0) results.push({ kind: 'character', name: c.name, ref: c.fileKey, score });
   }
 
   for (const w of index.worldEntries) {
+    const nameKey = normalizeKey(w.name);
     let score = 0;
-    if (normalize(w.name) === q) score = 1.0;
-    else if (normalize(w.name).includes(q) || q.includes(normalize(w.name))) score = 0.8;
+    if (nameKey === q) score = 1.0;
+    else if (nameKey.includes(q) || q.includes(nameKey)) score = 0.8;
+    else if (q.length >= 4 && fuzzyMatches(nameKey, q)) score = 0.5;
     else score = Math.min(0.4, termOverlap(query, w.terms) * 0.15);
     if (score > 0) results.push({ kind: 'world', name: w.name, score });
   }
@@ -232,8 +280,8 @@ function buildAdjacency(index: KnowledgeGraphIndex): Adjacency {
       return;
     }
 
-    const isCurrentFromSource = normalize(e.source) === fromKey;
-    const isExistingFromSource = normalize(existing.source) === fromKey;
+    const isCurrentFromSource = normalizeKey(e.source) === fromKey;
+    const isExistingFromSource = normalizeKey(existing.source) === fromKey;
 
     if (isCurrentFromSource && !isExistingFromSource) {
       // Cạnh mới đúng chiều xuất phát từ fromKey, thay thế cạnh ngược chiều
@@ -262,8 +310,8 @@ function buildAdjacency(index: KnowledgeGraphIndex): Adjacency {
   };
 
   for (const r of index.relationships) {
-    const a = normalize(r.source);
-    const b = normalize(r.target);
+    const a = normalizeKey(r.source);
+    const b = normalizeKey(r.target);
     if (a === b) continue;
     ensure(a, r.source);
     ensure(b, r.target);
@@ -287,17 +335,34 @@ export function resolveNodeName(
   index: KnowledgeGraphIndex,
   name: string,
 ): { key: string; display: string } | null {
-  const q = normalize(name);
+  const q = normalizeKey(name);
   for (const c of index.characters) {
-    if (normalize(c.name) === q) return { key: q, display: c.name };
+    if (normalizeKey(c.name) === q) return { key: q, display: c.name };
   }
   for (const c of index.characters) {
-    if (c.aliases.some(a => normalize(a) === q)) return { key: normalize(c.name), display: c.name };
+    if (c.aliases.some(a => normalizeKey(a) === q)) return { key: normalizeKey(c.name), display: c.name };
   }
   const adj = buildAdjacency(index);
   // Khớp một phần: tên nhập vào chứa hoặc được chứa trong tên nút
   for (const [key, node] of adj) {
     if (key === q || key.includes(q) || q.includes(key)) return { key, display: node.displayName };
+  }
+  // Fuzzy: query sai chính tả/thiếu dấu — thứ tự ưu tiên: tên bible → alias →
+  if (q.length >= 4) {
+    for (const c of index.characters) {
+      const nameKey = normalizeKey(c.name);
+      if (fuzzyMatches(nameKey, q)) return { key: nameKey, display: c.name };
+    }
+    for (const c of index.characters) {
+      if (c.aliases.some(a => fuzzyMatches(normalizeKey(a), q))) return { key: normalizeKey(c.name), display: c.name };
+    }
+    for (const w of index.worldEntries) {
+      const nameKey = normalizeKey(w.name);
+      if (fuzzyMatches(nameKey, q)) return { key: nameKey, display: w.name };
+    }
+    for (const [key, node] of adj) {
+      if (fuzzyMatches(key, q)) return { key, display: node.displayName };
+    }
   }
   return null;
 }
@@ -311,7 +376,7 @@ export function expandRelationships(
   seedNames: string[],
   maxDepth = 2
 ): { edges: RelatedEdge[]; relatedNames: string[] } {
-  const seed = new Set(seedNames.map(normalize));
+  const seed = new Set(seedNames.map(normalizeKey));
   const adj = buildAdjacency(index);
 
   const visited = new Set<string>();
@@ -326,7 +391,7 @@ export function expandRelationships(
       const neighbors = adj.get(node)?.neighbors;
       if (!neighbors) continue;
       for (const [nb, edge] of neighbors) {
-        edges.set(`${normalize(edge.source)}|${normalize(edge.target)}`, edge);
+        edges.set(`${normalizeKey(edge.source)}|${normalizeKey(edge.target)}`, edge);
         if (!visited.has(nb)) next.push(nb);
       }
     }
@@ -335,7 +400,7 @@ export function expandRelationships(
 
   // Lấy tên liên quan từ chính các cạnh để giữ nguyên chữ hoa/thường gốc
   const relatedNames = [...new Set([...edges.values()].flatMap(e => [e.source, e.target]))]
-    .filter(n => !seed.has(normalize(n)));
+    .filter(n => !seed.has(normalizeKey(n)));
   return { edges: [...edges.values()], relatedNames };
 }
 
@@ -414,13 +479,13 @@ export function computeGodNodes(
 ): GodNode[] {
   const degree = new Map<string, { name: string; degree: number }>();
   const touch = (raw: string) => {
-    const key = normalize(raw);
+    const key = normalizeKey(raw);
     const slot = degree.get(key);
     if (slot) slot.degree++;
     else degree.set(key, { name: raw.trim(), degree: 1 });
   };
   for (const r of relationships) {
-    if (normalize(r.source) === normalize(r.target)) continue;
+    if (normalizeKey(r.source) === normalizeKey(r.target)) continue;
     touch(r.source);
     touch(r.target);
   }

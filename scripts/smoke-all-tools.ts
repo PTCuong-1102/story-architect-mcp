@@ -1,6 +1,7 @@
 /**
  * Smoke test MCP surface (21 tools trong subset đăng ký ở script này —
- * server thật có 28 tools, xem smoke-stdio.ts — + 8 resources + 4 templates + 5 prompts)
+ * server thật có 29 tools (v0.3.0: thêm story_list_projects), xem smoke-stdio.ts —
+ * + 8 resources + 4 templates + 5 prompts)
  * qua InMemoryTransport THẬT của SDK — tái hiện đúng đường đi của client thực.
  */
 import * as path from 'node:path';
@@ -125,8 +126,7 @@ async function main() {
   const server = new McpServer({ name: 'story-architect-mcp', version: '0.1.0-smoke' });
   registerResources(server, getProject);
   registerPrompts(server, getProject);
-  registerProjectManagerTools(server, setProject, () => currentProject, getCurrentPath);
-  registerInitTool(server, getProject);
+  registerProjectManagerTools(server, setProject, () => currentProject, getCurrentPath);  registerInitTool(server, getProject);
   registerExportTool(server, getProject);
   registerScanMessyProjectTool(server, getProject);
   registerAutoRefactorTool(server, getProject);
@@ -163,7 +163,7 @@ async function main() {
     const tl = await client.request('tools/list', {});
     if (tl.error) throw new Error(JSON.stringify(tl.error));
     listedNames = (tl.result?.tools || []).map((t: any) => t.name);
-    report('tools/list', listedNames.length === 21 ? 'PASS' : 'WARN', `${listedNames.length} tools`);
+    report('tools/list', listedNames.length === 22 ? 'PASS' : 'WARN', `${listedNames.length} tools (subset v0.3.0)`);
   } catch (e: any) { report('tools/list', 'FAIL', e.message); }
 
   const extractId = (text: string): string | null => (text.match(/ID: (\S+)/) || [])[1] || null;
@@ -192,6 +192,9 @@ async function main() {
   {
     const r = await call(client, 'story_get_project_info', {});
     r.isError || r.text.includes('❌') ? report('story_get_project_info', 'FAIL', r.text.slice(0, 300)) : report('story_get_project_info', 'PASS');
+
+    const lp = await call(client, 'story_list_projects', {});
+    (!lp.isError && lp.text.includes('🟢')) ? report('story_list_projects', 'PASS') : report('story_list_projects', 'FAIL', lp.text.slice(0, 200));
   }
   {
     const r = await call(client, 'story_stats', {});

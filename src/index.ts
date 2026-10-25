@@ -42,7 +42,7 @@ async function handleCliOrServer() {
     return;
   }
   if (subCommand === '--version' || subCommand === '-v' || subCommand === 'version') {
-    console.log('story-architect-mcp v0.2.0');
+    console.log('story-architect-mcp v0.3.0');
     return;
   }
 
@@ -65,6 +65,7 @@ async function registerAllTools(
   setProject: (projectPath: string) => StoryProject,
   getProjectNullable: () => StoryProject | null,
   getCurrentPath: () => string | null,
+  listProjects: () => Promise<Array<{ path: string; name: string; initialized: boolean; active: boolean }>>,
 ): Promise<void> {
   const { registerProjectManagerTools } = await import('./tools/projectManager.js');
   const { registerInitTool } = await import('./tools/init.js');
@@ -88,7 +89,7 @@ async function registerAllTools(
   const { registerTrackEmotionTool } = await import('./tools/analysis/trackEmotion.js');
   const { registerGenerateWritingPromptTool } = await import('./tools/generatePrompt.js');
 
-  registerProjectManagerTools(server, setProject, getProjectNullable, getCurrentPath);
+  registerProjectManagerTools(server, setProject, getProjectNullable, getCurrentPath, listProjects);
   registerInitTool(server, getProject);
   registerExportTool(server, getProject);
   registerDashboardTool(server, getProject);
@@ -120,8 +121,26 @@ async function registerAllTools(
 async function startMcpServer() {
   // Runtime-switchable Project State
   const initialPath = process.argv[2] || null;
+
+  // ─── Project Registry (multi-project) ───
+  // Reuse StoryProject instance khi quay lại dự án đã mở trong phiên —
+  // tránh dựng lại index/cache từ đầu và cho phép story_list_projects
+  // liệt kê mọi dự án agent đang làm việc song song (mỗi instance vẫn có
+  // 1 dự án "active" — hợp đồng MCP giữ nguyên).
+  const projectRegistry = new Map<string, StoryProject>();
+
+  const registerProject = (projectPath: string): StoryProject => {
+    const resolved = path.resolve(projectPath);
+    let project = projectRegistry.get(resolved);
+    if (!project) {
+      project = new StoryProject(resolved);
+      projectRegistry.set(resolved, project);
+    }
+    return project;
+  };
+
   let currentProject: StoryProject | null = initialPath
-    ? new StoryProject(path.resolve(initialPath))
+    ? registerProject(initialPath)
     : null;
 
   const getProject = (): StoryProject => {
@@ -135,7 +154,7 @@ async function startMcpServer() {
   };
 
   const setProject = (projectPath: string): StoryProject => {
-    currentProject = new StoryProject(path.resolve(projectPath));
+    currentProject = registerProject(projectPath);
     return currentProject;
   };
 
@@ -143,9 +162,22 @@ async function startMcpServer() {
     return currentProject?.projectPath ?? null;
   };
 
+  const listProjects = async (): Promise<Array<{ path: string; name: string; initialized: boolean; active: boolean }>> => {
+    const out: Array<{ path: string; name: string; initialized: boolean; active: boolean }> = [];
+    for (const [resolved, project] of projectRegistry) {
+      out.push({
+        path: resolved,
+        name: path.basename(resolved),
+        initialized: await project.isInitialized(),
+        active: resolved === currentProject?.projectPath,
+      });
+    }
+    return out.sort((a, b) => Number(b.active) - Number(a.active) || a.path.localeCompare(b.path, 'vi'));
+  };
+
   const server = new McpServer({
     name: 'story-architect-mcp',
-    version: '0.2.0',
+    version: '0.3.0',
   });
 
   // ─── Register Resources ───
@@ -154,12 +186,12 @@ async function startMcpServer() {
   // ─── Register Prompts ───
   registerPrompts(server, getProject);
 
-  // ─── Register Tools (28 Tools total, lazy-loaded) ───
-  await registerAllTools(server, getProject, setProject, () => currentProject, getCurrentPath);
+  // ─── Register Tools (29 Tools total, lazy-loaded) ───
+  await registerAllTools(server, getProject, setProject, () => currentProject, getCurrentPath, listProjects);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`[story-architect-mcp] Server started with 28 tools, 8 static resources, 4 templates, and 5 prompts.`);
+  console.error(`[story-architect-mcp] Server started with 29 tools, 8 static resources, 4 templates, and 5 prompts.`);
   if (initialPath) {
     console.error(`[story-architect-mcp] Initial Project Path: ${path.resolve(initialPath)}`);
   } else {
