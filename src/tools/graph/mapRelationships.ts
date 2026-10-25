@@ -114,8 +114,6 @@ export function registerMapRelationshipsTool(server: McpServer, getProject: () =
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
-      const data = await project.getRelationships();
-
       // ─── Chế độ tự quét: không truyền source/target ───
       if (!params.source && !params.target) {
         const cooccurrences = await autoDetectCooccurrences(project, params.minChapters);
@@ -131,47 +129,51 @@ export function registerMapRelationshipsTool(server: McpServer, getProject: () =
           };
         }
 
-        let created = 0;
+      let created = 0;
         let updated = 0;
         const report: string[] = [];
 
-        for (const pair of cooccurrences) {
-          const rel = data.relationships.find(
-            r => (r.source.toLowerCase() === pair.a.toLowerCase() && r.target.toLowerCase() === pair.b.toLowerCase()) ||
-                 (r.source.toLowerCase() === pair.b.toLowerCase() && r.target.toLowerCase() === pair.a.toLowerCase())
-          );
+        // Mutate-in-lock: đọc→build→ghi trong cùng khoá — auto-sscan nặng,
+        // dễ trúng race với tool ghi relationships song song.
+        const data = await project.updateRelationships(cur => {
+          const relationships = [...cur.relationships];
+          for (const pair of cooccurrences) {
+            const rel = relationships.find(
+              r => (r.source.toLowerCase() === pair.a.toLowerCase() && r.target.toLowerCase() === pair.b.toLowerCase()) ||
+                   (r.source.toLowerCase() === pair.b.toLowerCase() && r.target.toLowerCase() === pair.a.toLowerCase())
+            );
 
-          if (rel) {
-            // Chỉ ghi nhận thêm mốc phát triển, không ghi đè loại quan hệ thủ công
-            if (params.chapter) {
-              rel.evolution.push({
-                chapter: params.chapter,
-                change: `Tiếp tục đồng xuất hiện (tự quét): ${pair.chapters} chương`,
-              });
+            if (rel) {
+              // Chỉ ghi nhận thêm mốc phát triển, không ghi đè loại quan hệ thủ công
+              if (params.chapter) {
+                rel.evolution.push({
+                  chapter: params.chapter,
+                  change: `Tiếp tục đồng xuất hiện (tự quét): ${pair.chapters} chương`,
+                });
+              }
+              updated++;
+              report.push(`  🔄 ${pair.a} ↔ ${pair.b}: đã có quan hệ [${rel.type}] — ghi nhận thêm (${pair.chapters} chương đồng xuất hiện)`);
+            } else {
+              const newRel: Relationship = {
+                source: pair.a,
+                target: pair.b,
+                type: 'other',
+                // Máy suy ra từ đồng xuất hiện → INFERRED (độ tin cậy thấp hơn tay)
+                provenance: 'inferred',
+                description: `Đồng xuất hiện trong ${pair.chapters} chương (phát hiện tự động)`,
+                evolution: [{
+                  chapter: params.chapter || 'auto-scan',
+                  change: `Phát hiện đồng xuất hiện qua ${pair.chapters} chương`,
+                  newType: 'other',
+                }],
+              };
+              relationships.push(newRel);
+              created++;
+              report.push(`  ➕ ${pair.a} ↔ ${pair.b}: tạo mới [other] (${pair.chapters} chương đồng xuất hiện)`);
             }
-            updated++;
-            report.push(`  🔄 ${pair.a} ↔ ${pair.b}: đã có quan hệ [${rel.type}] — ghi nhận thêm (${pair.chapters} chương đồng xuất hiện)`);
-          } else {
-            const newRel: Relationship = {
-              source: pair.a,
-              target: pair.b,
-              type: 'other',
-              // Máy suy ra từ đồng xuất hiện → INFERRED (độ tin cậy thấp hơn tay)
-              provenance: 'inferred',
-              description: `Đồng xuất hiện trong ${pair.chapters} chương (phát hiện tự động)`,
-              evolution: [{
-                chapter: params.chapter || 'auto-scan',
-                change: `Phát hiện đồng xuất hiện qua ${pair.chapters} chương`,
-                newType: 'other',
-              }],
-            };
-            data.relationships.push(newRel);
-            created++;
-            report.push(`  ➕ ${pair.a} ↔ ${pair.b}: tạo mới [other] (${pair.chapters} chương đồng xuất hiện)`);
           }
-        }
-
-        await project.saveRelationships(data);
+          return { ...cur, relationships };
+        });
         // Đồ thị đổi → graph cache cũ
         await invalidateIndex(project);
 
@@ -196,45 +198,56 @@ ${report.join('\n')}
         return errResult('❌ Chế độ thủ công cần đủ: source, target và type. Hoặc bỏ trống source/target để chạy chế độ tự quét manuscript.');
       }
 
-      // Tìm mối quan hệ xem đã tồn tại chưa
-      let rel = data.relationships.find(
-        r => (r.source.toLowerCase() === params.source!.toLowerCase() && r.target.toLowerCase() === params.target!.toLowerCase()) ||
-             (r.source.toLowerCase() === params.target!.toLowerCase() && r.target.toLowerCase() === params.source!.toLowerCase())
-      );
+      // Mutate-in-lock: đọc→cập nhật/tạo mới→ghi trong cùng khoá.
+      // Narrow-out trước để không phải dùng `!` trong closure (tsc không
+      // giữ guard qua closure của updateRelationships).
+      const src = params.source!;      // đã đảm bảo bởi guard phía trên
+      const dst = params.target!;
+      const newType: Relationship['type'] = params.type;
+      const relDesc: string | undefined = params.description;
+      const relChapter: string | undefined = params.chapter;
 
-      if (rel) {
-        const oldType = rel.type;
-        rel.type = params.type;
-        if (params.description) rel.description = params.description;
-        // Người khẳng định thủ công → nâng lên EXTRACTED dù trước đó là INFERRED
-        rel.provenance = 'extracted';
+      let rel: Relationship | undefined;
+      const data = await project.updateRelationships(cur => {
+        const relationships = [...cur.relationships];
+        rel = relationships.find(
+          r => (r.source.toLowerCase() === src.toLowerCase() && r.target.toLowerCase() === dst.toLowerCase()) ||
+               (r.source.toLowerCase() === dst.toLowerCase() && r.target.toLowerCase() === src.toLowerCase())
+        );
 
-        if (params.chapter) {
-          rel.evolution.push({
-            chapter: params.chapter,
-            change: `Đổi quan hệ từ ${oldType} sang ${params.type}: ${params.description || ''}`,
-            newType: params.type,
-          });
+        if (rel) {
+          const oldType = rel.type;
+          rel.type = newType;
+          if (relDesc) rel.description = relDesc;
+          // Người khẳng định thủ công → nâng lên EXTRACTED dù trước đó là INFERRED
+          rel.provenance = 'extracted';
+
+          if (relChapter) {
+            rel.evolution.push({
+              chapter: relChapter,
+              change: `Đổi quan hệ từ ${oldType} sang ${newType}: ${relDesc || ''}`,
+              newType,
+            });
+          }
+        } else {
+          const newRel: Relationship = {
+            source: src,
+            target: dst,
+            type: newType,
+            description: relDesc || '',
+            // Khai báo thủ công với type rõ ràng → EXTRACTED
+            provenance: 'extracted',
+            startChapter: relChapter,
+            evolution: relChapter ? [{
+              chapter: relChapter,
+              change: `Khởi tạo mối quan hệ: ${newType}`,
+              newType,
+            }] : [],
+          };
+          relationships.push(newRel);
         }
-      } else {
-        const newRel: Relationship = {
-          source: params.source,
-          target: params.target,
-          type: params.type,
-          description: params.description || '',
-          // Khai báo thủ công với type rõ ràng → EXTRACTED
-          provenance: 'extracted',
-          startChapter: params.chapter,
-          evolution: params.chapter ? [{
-            chapter: params.chapter,
-            change: `Khởi tạo mối quan hệ: ${params.type}`,
-            newType: params.type,
-          }] : [],
-        };
-        data.relationships.push(newRel);
-      }
-
-      await project.saveRelationships(data);
+        return { ...cur, relationships };
+      });
       // Đồ thị đổi → graph cache cũ
       await invalidateIndex(project);
 

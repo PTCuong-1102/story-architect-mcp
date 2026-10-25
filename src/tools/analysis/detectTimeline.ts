@@ -143,26 +143,28 @@ export function registerDetectTimelineTool(server: McpServer, getProject: () => 
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
-      const timeline = await project.getTimeline();
-
-      // Thêm sự kiện nếu truyền vào
+      // Thêm sự kiện nếu truyền vào (mutate-in-lock — không mất event khi
+      // hai tool call song song cùng thêm event timeline)
       if (params.addEvent) {
-        timeline.events.push({
-          id: 'evt_' + generateId(),
-          label: params.addEvent.label,
-          description: params.addEvent.description || '',
-          chapter: params.addEvent.chapter,
-          absoluteDate: params.addEvent.absoluteDate,
-          relativeOrder: params.addEvent.relativeOrder,
-          characters: params.addEvent.characters || [],
-          location: params.addEvent.location,
-          thread: params.addEvent.thread,
-        });
-        await project.saveTimeline(timeline);
+        await project.updateTimeline(cur => ({
+          ...cur,
+          events: [...cur.events, {
+            id: 'evt_' + generateId(),
+            label: params.addEvent!.label,
+            description: params.addEvent!.description || '',
+            chapter: params.addEvent!.chapter,
+            absoluteDate: params.addEvent!.absoluteDate,
+            relativeOrder: params.addEvent!.relativeOrder,
+            characters: params.addEvent!.characters || [],
+            location: params.addEvent!.location,
+            thread: params.addEvent!.thread,
+          }],
+        }));
         // Timeline đổi → graph cache cũ
         await invalidateIndex(project);
       }
 
+      const timeline = await project.getTimeline();
       const events = timeline.events;
 
       // Phát hiện mâu thuẫn

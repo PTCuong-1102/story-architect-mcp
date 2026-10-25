@@ -29,8 +29,6 @@ export function registerForeshadowingTools(server: McpServer, getProject: () => 
         return errResult('❌ Dự án chưa được khởi tạo.');
       }
 
-      const data = await project.getForeshadowing();
-
       const newItem: ForeshadowingItem = {
         id: generateId(),
         setup: params.setup,
@@ -41,8 +39,11 @@ export function registerForeshadowingTools(server: McpServer, getProject: () => 
         createdAt: new Date().toISOString(),
       };
 
-      data.items.push(newItem);
-      await project.saveForeshadowing(data);
+      // Mutate-in-lock: đọc→push→ghi trong cùng khoá, không bị cướp xen
+      const data = await project.updateForeshadowing(cur => ({
+        ...cur,
+        items: [...cur.items, newItem],
+      }));
 
       const plantedCount = data.items.filter(i => i.status === 'planted').length;
 
@@ -83,23 +84,29 @@ ${newItem.setupLine ? `💬 Trích dẫn: "${newItem.setupLine}"` : ''}
         return errResult('❌ Dự án chưa được khởi tạo.');
       }
 
-      const data = await project.getForeshadowing();
-      const item = data.items.find(i => i.id === params.id);
-
-      if (!item) {
-        const available = data.items
+      // Đọc kiểm định trước (read-only) để thông báo lỗi thân thiện
+      const existing = await project.getForeshadowing();
+      if (!existing.items.some(i => i.id === params.id)) {
+        const available = existing.items
           .filter(i => i.status === 'planted')
           .map(i => `  - ${i.id}: ${i.setup} [${i.importance}] (${i.setupChapter})`)
           .join('\n');
         return errResult(`❌ Không tìm thấy: ${params.id}\n\n🌱 Chi tiết chưa giải gỡ:\n${available || '  _Không có._'}`);
       }
 
-      item.status = 'fired';
-      item.payoff = params.payoff;
-      item.payoffChapter = params.payoffChapter;
-      item.firedAt = new Date().toISOString();
-
-      await project.saveForeshadowing(data);
+      const data = await project.updateForeshadowing(cur => ({
+        ...cur,
+        items: cur.items.map(i => i.id === params.id
+          ? {
+              ...i,
+              status: 'fired' as const,
+              payoff: params.payoff,
+              payoffChapter: params.payoffChapter,
+              firedAt: new Date().toISOString(),
+            }
+          : i),
+      }));
+      const item = data.items.find(i => i.id === params.id)!;
 
       const plantedCount = data.items.filter(i => i.status === 'planted').length;
 

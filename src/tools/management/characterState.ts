@@ -71,23 +71,26 @@ export function registerCharacterStateTools(
           timestamp: new Date().toISOString(),
         };
 
-        if (!charHistory) {
-          charHistory = {
-            character: params.character,
-            states: [snapshot],
-          };
-          statesFile.characters.push(charHistory);
-        } else {
-          // Nếu cùng chương thì update hoặc push mới (so khớp chuẩn hóa)
-          const existingIdx = charHistory.states.findIndex(s => normKey(s.chapter ?? '') === normKey(logChapter));
-          if (existingIdx >= 0) {
-            charHistory.states[existingIdx] = snapshot;
+        // Mutate-in-lock: đọc→upsert snapshot→ghi trong cùng khoá.
+        // State cũ không dùng để báo cáo (report dựa trên `snapshot`)
+        // nên bỏ được khoảng trống get→save dễ race.
+        await project.updateCharacterStates(cur => {
+          const characters = [...cur.characters];
+          const idx = characters.findIndex(c => normKey(c.character) === normChar);
+          if (idx < 0) {
+            characters.push({ character: params.character, states: [snapshot] });
           } else {
-            charHistory.states.push(snapshot);
+            const states = [...characters[idx].states];
+            const sIdx = states.findIndex(s => normKey(s.chapter ?? '') === normKey(logChapter));
+            if (sIdx >= 0) {
+              states[sIdx] = snapshot;
+            } else {
+              states.push(snapshot);
+            }
+            characters[idx] = { ...characters[idx], states };
           }
-        }
-
-        await project.saveCharacterStates(statesFile);
+          return { ...cur, characters };
+        });
 
         return {
           content: [{

@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
+import * as z from 'zod';
 import matter from 'gray-matter';
 import {
   readJsonFile,
@@ -278,6 +279,52 @@ export class StoryProject {
     await withFileLock(lockPathFor(this.styleGuidePath()), async () => {
       await writeJsonFile(this.styleGuidePath(), { ...data, updatedAt: new Date().toISOString() });
     });
+  }
+
+  // ====== Atomic update (mutate-in-lock) ======
+
+  /**
+   * RMW nguyên khối có khoá: đọc file TRONG lock → chạy mutator → ghi lại
+   * (vẫn trong cùng lock, Zod validate lại trước khi ghi).
+   *
+   * Khác với get→mutate→save tách rời: hai tool call song song trên cùng
+   * file không bao giờ mất mũi push của nhau (khoảng trống get→save
+   * đã được đóng hoàn toàn). các tool trạng thái (plot holes, foreshadowing,
+   * relationships, character states, timeline) bắt buộc dùng API này.
+   */
+  private async updateStateFile<T extends object>(
+    schema: z.ZodType<T>,
+    filePath: string,
+    mutator: (current: T) => T,
+  ): Promise<T> {
+    return withFileLock(lockPathFor(filePath), async () => {
+      const raw = await readJsonFile<unknown>(filePath);
+      const current = raw ? schema.parse(raw) : schema.parse({});
+      const mutated = mutator(current);
+      const validated = schema.parse({ ...mutated, updatedAt: new Date().toISOString() });
+      await writeJsonFile(filePath, validated);
+      return validated;
+    });
+  }
+
+  async updateRelationships(mutator: (current: RelationshipsFile) => RelationshipsFile): Promise<RelationshipsFile> {
+    return this.updateStateFile(RelationshipsFileSchema, this.relationshipsPath(), mutator);
+  }
+
+  async updateForeshadowing(mutator: (current: ForeshadowingFile) => ForeshadowingFile): Promise<ForeshadowingFile> {
+    return this.updateStateFile(ForeshadowingFileSchema, this.foreshadowingPath(), mutator);
+  }
+
+  async updatePlotHoles(mutator: (current: PlotHolesFile) => PlotHolesFile): Promise<PlotHolesFile> {
+    return this.updateStateFile(PlotHolesFileSchema, this.holesPath(), mutator);
+  }
+
+  async updateCharacterStates(mutator: (current: CharacterStatesFile) => CharacterStatesFile): Promise<CharacterStatesFile> {
+    return this.updateStateFile(CharacterStatesFileSchema, this.characterStatesPath(), mutator);
+  }
+
+  async updateTimeline(mutator: (current: Timeline) => Timeline): Promise<Timeline> {
+    return this.updateStateFile(TimelineSchema, this.timelinePath(), mutator);
   }
 
   // ====== Characters ======

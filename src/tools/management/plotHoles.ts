@@ -30,8 +30,6 @@ export function registerPlotHoleTools(server: McpServer, getProject: () => Story
         return errResult('❌ Dự án chưa được khởi tạo. Hãy chạy story_init trước.');
       }
 
-      const data = await project.getPlotHoles();
-
       const newHole: PlotHole = {
         id: generateId(),
         title: params.title,
@@ -42,8 +40,11 @@ export function registerPlotHoleTools(server: McpServer, getProject: () => Story
         status: 'open',
       };
 
-      data.holes.push(newHole);
-      await project.savePlotHoles(data);
+      // Mutate-in-lock: đọc→push→ghi trong cùng khoá
+      const data = await project.updatePlotHoles(cur => ({
+        ...cur,
+        holes: [...cur.holes, newHole],
+      }));
 
       const openCount = data.holes.filter(h => h.status === 'open').length;
 
@@ -84,22 +85,23 @@ export function registerPlotHoleTools(server: McpServer, getProject: () => Story
         return errResult('❌ Dự án chưa được khởi tạo.');
       }
 
-      const data = await project.getPlotHoles();
-      const hole = data.holes.find(h => h.id === params.id);
-
-      if (!hole) {
-        const available = data.holes
+      // Đọc kiểm định trước (read-only) để thông báo lỗi thân thiện
+      const existing = await project.getPlotHoles();
+      if (!existing.holes.some(h => h.id === params.id)) {
+        const available = existing.holes
           .filter(h => h.status === 'open')
           .map(h => `  - ${h.id}: ${h.title} [${h.severity}]`)
           .join('\n');
         return errResult(`❌ Không tìm thấy plot hole: ${params.id}\n\n📋 Các plot hole đang mở:\n${available || '  _Không có._'}`);
       }
 
-      hole.status = params.status;
-      hole.resolution = params.resolution;
-      hole.resolvedAt = new Date().toISOString();
-
-      await project.savePlotHoles(data);
+      const data = await project.updatePlotHoles(cur => ({
+        ...cur,
+        holes: cur.holes.map(h => h.id === params.id
+          ? { ...h, status: params.status, resolution: params.resolution, resolvedAt: new Date().toISOString() }
+          : h),
+      }));
+      const hole = data.holes.find(h => h.id === params.id)!;
 
       const openCount = data.holes.filter(h => h.status === 'open').length;
 
