@@ -64,8 +64,10 @@ Kỹ năng này biến AI thành **Nhà thiết kế cấu trúc Arc và nhịp 
 | Tạo toàn bộ chương mới | `story_write_chapter` | `arc`, `chapter`, `content`, `title` |
 | Tạo Visual Dashboard | `story_generate_dashboard` | `outputPath`, `autoOpen` |
 | Thống kê tiến độ | `story_stats` | *(không tham số)* |
-| Lấy bối cảnh tuyến nhân vật | `story_query_context` | `query`, `budgetTokens` |
-| Khảo sát quan hệ xung đột | `story_map_relationships` | `source`, `target`, `characterId` |
+| Lấy bối cảnh tuyến nhân vật | `story_query_context` | `query` (fuzzy: không dấu/sai tả nhẹ vẫn khớp), `budgetTokens` |
+| Khảo sát quan hệ xung đột | `story_map_relationships` | Auto-scan: `minChapters` / Manual: `source`, `target`, `type` |
+| Thêm sự kiện timeline Arc | `story_detect_timeline_conflicts` | `addEvent: {label, chapter, relativeOrder, thread, ...}` — mutate-in-lock |
+| Xem dự án đang mở | `story_list_projects` | *(không tham số)* — v0.3.0 |
 | Soạn prompt viết chương | `story_generate_writing_prompt` | `arc`, `chapter`, `strategy` |
 
 ---
@@ -76,9 +78,10 @@ Kỹ năng này biến AI thành **Nhà thiết kế cấu trúc Arc và nhịp 
 
 1. **Bước 1 & 2 — Khảo sát & mục tiêu:**
    ```json
+   story_list_projects({})
    story_stats({})
    story_query_context({ "query": "Hắc Phong Thành Hắc Vũ" })
-   story_map_relationships({ "characterId": "lam-phong" })
+   story_map_relationships({ "minChapters": 2 })
    ```
 
 2. **Bước 3 & 4 — Triển khai phân cảnh ch_001:**

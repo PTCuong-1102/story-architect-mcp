@@ -18,8 +18,8 @@ Kỹ năng này biến AI thành **Nhà xuất bản & Báo cáo viên dự án*
 2. **CHỌN ĐÚNG ĐỊNH DẠNG (Right format per purpose):**
    - **`markdown_single`** — bản thảo gốc gom gọn 1 file Markdown duy nhất, tiện diff/lưu trữ git.
    - **`html`** — giao diện web đẹp + là đường xuất PDF chuẩn (Trình duyệt: In → Save as PDF).
-   - **`epub`** — sách điện tử chuẩn quốc tế (Kindle/Apple Books/Google Play Books).
-   - **`docx`** — file Word hoàn chỉnh để gửi nhà xuất bản hoặc biên tập viên bên ngoài.
+   - **`epub`** — sách điện tử chuẩn quốc tế (Kindle/Apple Books/Google Play Books). v0.3.0: metadata `dcterms:modified`, CSS justify/hyphens và ngắt trang giữa các section → mở trên e-reader cho text căn đều đúng chuẩn typography.
+   - **`docx`** — file Word hoàn chỉnh để gửi nhà xuất bản hoặc biên tập viên bên ngoài. v0.3.0: page break giữa các chương, docProps (core/app) đầy đủ, style Normal căn đều Times New Roman.
    - **`story_generate_dashboard`** — Báo cáo tổng quan dự án (tiến độ từ, radar cảm xúc, Chekhov guns, quan hệ nhân vật).
 
 3. **KÈM MỤC LỤC & DÀN Ý (TOC & outline included):**
@@ -30,6 +30,7 @@ Kỹ năng này biến AI thành **Nhà xuất bản & Báo cáo viên dự án*
 ## 📋 WORKFLOW XUẤT BẢN & BÁO CÁO (4 BƯỚC)
 
 ### Bước 1: Kiểm tra tổng thể (Preflight Check)
+- Nếu có nhiều tác phẩm song song: gọi `story_list_projects` (v0.3.0) xem dự án nào đang 🟢 active; sai dự án thì `story_set_project` chuyển ngay trước khi export.
 - Chạy `story_stats` để xác nhận tổng số từ, số chương và tiến độ mục tiêu.
 - Chạy `story_get_project_info` để kiểm tra metadata tác giả, tên truyện.
 
@@ -52,6 +53,7 @@ Kỹ năng này biến AI thành **Nhà xuất bản & Báo cáo viên dự án*
 | Tạo Visual HTML Dashboard | `story_generate_dashboard` | `outputPath`, `autoOpen` |
 | Kiểm tra tiến độ & số từ | `story_stats` | *(không tham số)* |
 | Lấy thông tin dự án/tác giả | `story_get_project_info` | *(không tham số)* |
+| Xem dự án đang mở trong phiên | `story_list_projects` | *(không tham số)* — v0.3.0 |
 
 ---
 

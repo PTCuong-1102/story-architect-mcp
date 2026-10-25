@@ -21,8 +21,9 @@ Kỹ năng này biến AI thành **Biên tập viên rà soát tính liên tục
    - Kiểm tra thứ tự tương đối (`relativeOrder`) giữa các tuyến song song (`thread`).
 
 3. **CHARACTER STATE CONTINUITY (Nhất quán trạng thái nhân vật):**
-   - Đối chiếu chấn thương, thể lực, tâm lý và trang bị của nhân vật qua `story_get_character_timeline`.
+   - Đối chiếu chấn thương, thể lực, tâm lý và trang bị của nhân vật qua `story_track_character_state` với `action: "history"` (lịch sử theo mốc chương) và `action: "query"` (mốc gần nhất/tại chương cụ thể).
    - Vết thương ở chương trước không thể tự khỏi vô cớ ở chương sau; bảo vật bị mất không thể đột ngột tái xuất hiện.
+   - Ghi state mới (`action: "log"`) là mutate-in-lock v0.3.0 — chạy song song với tool ghi khác không mất dữ liệu.
 
 4. **KHÔNG TỰ SỬA NẾU CHƯA GHI NHẬN (Register, then fix):**
    - Mọi mâu thuẫn phát hiện được phải ghi vào `.story/unresolved_holes.json` bằng `story_log_plot_hole` trước khi đề xuất cách sửa.
@@ -41,7 +42,7 @@ Kỹ năng này biến AI thành **Biên tập viên rà soát tính liên tục
 - Khi phát hiện sự kiện thiếu mốc, đề xuất thêm qua `addEvent` với trường `thread` tương ứng.
 
 ### Bước 2: Kiểm tra dòng trạng thái nhân vật (Character State Audit)
-- Gọi `story_get_character_timeline` cho các nhân vật chính xuất hiện trong arc.
+- Gọi `story_track_character_state({ character: "...", action: "history" })` cho các nhân vật chính xuất hiện trong arc.
 - Kiểm tra tính liên tục: Vị trí xuất phát, chấn thương chưa lành, tâm trạng, và danh sách đồ vật đang giữ.
 
 ### Bước 3: Rà soát giọng văn, cảm xúc & nhịp độ (Voice, Sentiment & Pacing Audit)
@@ -59,14 +60,15 @@ Kỹ năng này biến AI thành **Biên tập viên rà soát tính liên tục
 
 | Mục đích | Tool MCP | Tham số chính |
 | :--- | :--- | :--- |
+| Xem dự án đang mở trước audit | `story_list_projects` | *(không tham số)* — v0.3.0 |
 | Phát hiện xung đột timeline đa tuyến | `story_detect_timeline_conflicts` | `addEvent` (hỗ trợ `thread`, `location`, `characters`) |
-| Truy vấn dòng trạng thái nhân vật | `story_get_character_timeline` | `characterId`, `arc` |
-| Ghi nhận biến động trạng thái | `story_track_character_state` | `characterId`, `arc`, `chapter`, `location`, `health`, `psychology` |
-| Ghi nhận lỗ hổng cốt truyện | `story_log_plot_hole` | `title`, `description`, `severity`, `chapters` |
-| Đánh dấu đã khắc phục | `story_resolve_plot_hole` | `id`, `resolution`, `status` |
-| Kiểm tra giọng văn & tone | `story_analyze_voice` / `story_analyze_sentiment` | `arc`, `chapter` |
+| Truy vấn lịch sử & trạng thái gần nhất | `story_track_character_state` | `character`, `action: "query"` / `"history"`, `chapter` |
+| Ghi nhận biến động trạng thái | `story_track_character_state` | `character`, `chapter`, `action: "log"`, `state: {location, inventory, condition, status, knownSecrets, notes}` |
+| Ghi nhận lỗ hổng cốt truyện | `story_log_plot_hole` | `title`, `description`, `severity`, `chapters` (mutate-in-lock) |
+| Đánh dấu đã khắc phục | `story_resolve_plot_hole` | `id`, `resolution`, `status` (mutate-in-lock) |
+| Kiểm tra giọng văn & tone | `story_analyze_voice` / `story_analyze_sentiment` | `arc`, `chapter` — sentiment báo method `lexicon-v2` + ⚠️ khi Coverage < 5% |
 | Kiểm tra nhịp độ | `story_analyze_pacing` | `arc`, `chapter` |
-| Đối chiếu bối cảnh Knowledge Graph | `story_query_context` | `query`, `budgetTokens` |
+| Đối chiếu bối cảnh Knowledge Graph | `story_query_context` | `query` (fuzzy: không dấu/sai tả nhẹ vẫn khớp), `budgetTokens` |
 | Liệt kê gài cắm chưa giải | `story_list_unfired` | *(không tham số)* |
 
 ---
@@ -83,7 +85,7 @@ Kỹ năng này biến AI thành **Biên tập viên rà soát tính liên tục
 
 2. **Bước 2 — Tra cứu trạng thái nhân vật:**
    ```json
-   story_get_character_timeline({ "characterId": "lam-phong", "arc": "arc_01" })
+   story_track_character_state({ "character": "Lâm Phong", "action": "history" })
    ```
    → Phát hiện: Ở ch_004 bị gãy tay phải, nhưng ở ch_006 lại dùng tay phải thi triển kiếm pháp mà không có hồi phục trị liệu.
 

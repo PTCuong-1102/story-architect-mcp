@@ -12,7 +12,7 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
 ## 🎯 NGUYÊN TẮC HOẠT ĐỘNG CỐT LÕI
 
 1. **CONTINUITY & CHARACTER STATE TRACKING (Liên tục & Theo dõi nhân vật):**
-   - Trước khi bắt đầu phân cảnh hay chương mới, LUÔN LUÔN truy vấn dữ liệu dự án qua `story_query_context`, `story_map_relationships` và `story_get_character_timeline`.
+   - Trước khi bắt đầu phân cảnh hay chương mới, LUÔN LUÔN truy vấn dữ liệu dự án qua `story_query_context`, `story_map_relationships` và `story_track_character_state` (action="query" hoặc "history").
    - Đảm bảo tính nhất quán về: Hồ sơ nhân vật (tính cách, ngoại hình, năng lực), vị trí địa lý, các mối quan hệ hiện tại, và trạng thái tâm lý/sức khỏe/vật phẩm sở hữu (`story_track_character_state`).
 
 2. **RELATIONSHIP PROVENANCE & SHORTEST PATH (Nguồn gốc quan hệ & Đường đi liên kết):**
@@ -40,18 +40,25 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
    - Sử dụng `story_write_chapter` và `story_append_scene` để ghi nhận trực tiếp vào bản thảo với tính năng tự động đếm từ và tự động tạo snapshot sao lưu an toàn khi ghi đè.
    - Snapshot bảo vệ toàn vẹn cả 9 file siêu dữ liệu cốt lõi và tự động dọn dẹp các tệp untracked khi thực hiện `story_rollback`.
 
+8. **MULTI-PROJECT & WRITE SAFETY (Nhiều tác phẩm song song & An toàn ghi — v0.3.0):**
+   - Đầu phiên làm việc, gọi `story_list_projects` xem các dự án đã mở trong server (🟢 = active); gọi `story_set_project` để chuyển đổi — instance được tái sử dụng nên không mất index/cache đã dựng.
+   - Mọi ghi state (`.story/*.json`) đều qua **atomic write + advisory lock 2 tầng**: các tool call song song (ví dụ log plot hole và log setup cùng lúc) không bao giờ mất mũi ghi của nhau.
+   - Gặp thông báo "⏳ Không chiếm được file lock" = process khác đang ghi: **chờ vài giây rồi thử lại**, không quản lý tạm trạng thái trong bộ nhớ tool.
+   - Ghi state qua mutator (log setup/payoff, plot hole, track state, timeline event, map relationship) là read-modify-write nguyên khối — có thể chạy song song an toàn tuyệt đối.
+
 ---
 
 ## 📋 WORKFLOW SÁNG TÁC CHƯƠNG TOÀN DIỆN (6 BƯỚC)
 
 ### Bước 1: Nắm bắt yêu cầu chương từ Tác giả (Input Gathering)
 - Trao đổi với tác giả để xác định mục tiêu của chương: Tuyến truyện (Thread), nhân vật chính xuất hiện, xung đột trung tâm, bối cảnh không gian/thời gian, và cảm xúc chủ đạo.
+- Đầu phiên hoặc khi có nhiều tác phẩm song song: gọi `story_list_projects` để biết dự án nào đang 🟢 active; sai dự án thì `story_set_project({ projectPath: "..." })` chuyển ngay (không mất index/cache).
 
 ### Bước 2: Kiểm tra hồ sơ, trạng thái & bối cảnh liên quan (Context & State Lookup)
-- Gọi `story_query_context({ "query": "..." })` với các từ khóa nhân vật/địa điểm của chương để lấy thông tin chi tiết.
+- Gọi `story_query_context({ "query": "..." })` với các từ khóa nhân vật/địa điểm của chương để lấy thông tin chi tiết (**tên gõ thiếu dấu / sai chính tả nhẹ vẫn khớp** — v0.3.0 normalize không dấu + fuzzy Levenshtein).
 - Nếu có hai nhân vật ở hai phe hoặc chưa từng chạm trán, gọi `story_query_context({ "from": "NhânVậtA", "to": "NhânVậtB", "query": "cầu nối" })` để tìm đường liên hệ ngắn nhất.
-- Gọi `story_get_character_timeline` để kiểm tra trạng thái gần nhất của nhân vật (sức khỏe, vị trí, tâm lý, đồ đạc).
-- Gọi `story_map_relationships` để kiểm tra quan hệ và xung đột tiềm ẩn giữa các nhân vật (chú ý nhãn `EXTRACTED` vs `INFERRED`).
+- Gọi `story_track_character_state({ "character": "Tên Nhân Vật", "action": "history" })` để xem dòng thời gian biến động trạng thái (sức khỏe, vị trí, tâm lý, đồ đạc).
+- Gọi `story_query_context` hoặc `story_map_relationships` (mode auto-scan khi không truyền source/target) để kiểm tra quan hệ — chú ý nhãn `EXTRACTED` vs `INFERRED`.
 - Gọi `story_list_unfired` để xem có gài gắm (foreshadowing) nào cần được giải quyết (payoff) trong chương này không.
 
 ### Bước 3: Dự thảo phân cảnh (Scene Outline)
@@ -75,25 +82,25 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
 - Chạy `story_stats` để thống kê số từ, nhân vật hạt nhân (God-Nodes) và thực thể.
 - Chạy `story_analyze_pacing` để đánh giá nhịp độ chương truyện.
 - Chạy `story_analyze_voice` để kiểm tra tính đồng nhất của giọng văn và tỷ lệ hội thoại.
-- Chạy `story_analyze_sentiment` để phân tích đường cong cảm xúc (emotional arc), polarity, và tone drift.
+- Chạy `story_analyze_sentiment` để phân tích đường cong cảm xúc (emotional arc), polarity, và tone drift. **Chú ý nhãn phương pháp `lexicon-v2`**: nếu output cảnh báo "Coverage < 5%", kết quả có thể bỏ qua ẩn dụ/nghị đảo — hãy rà bằng đọc trực tiếp thay vì tin con số.
 - Chạy `story_detect_timeline_conflicts` để đảm bảo không mâu thuẫn thời gian hay phân thân nhân vật.
 - Xuất HTML Dashboard tổng quan bằng `story_generate_dashboard` khi cần báo cáo trực quan cho tác giả.
 
 ---
 
-## 🛠️ BẢNG ÁNH XẠ CÔNG CỤ MCP (STORY-ARCHITECT-MCP TOOLKIT V0.2.0)
+## 🛠️ BẢNG ÁNH XẠ CÔNG CỤ MCP (STORY-ARCHITECT-MCP TOOLKIT V0.3.0)
 
 | Nhóm công cụ | Tên Tool MCP | Chức năng chính & Điểm nâng cấp |
 | :--- | :--- | :--- |
 | **Sáng tác Bản thảo (Manuscript)** | `story_write_chapter` | Tạo hoặc ghi đè chương (tự động đếm từ chuẩn tiếng Việt & snapshot an toàn trước khi ghi) |
 | | `story_append_scene` | Nối thêm phân cảnh (scene) vào cuối chương hiện có mà không làm mất văn bản cũ |
 | | `story_read_chapter` | Đọc nội dung chương và trích xuất danh sách headings/phân cảnh |
-| **Theo dõi Trạng thái Nhân vật** | `story_track_character_state` | Ghi nhận vị trí, sức khỏe, tâm lý, vật phẩm biến động theo từng chương (hỗ trợ delta) |
-| | `story_get_character_timeline` | Truy vấn toàn bộ dòng thời gian biến động trạng thái của nhân vật theo thứ tự tự nhiên |
-| **Bối cảnh & Đồ thị Tri thức (Graph & Bible)** | `story_query_context` | Lấy context tối ưu ngân sách token; **Hỗ trợ `from` + `to`** tìm đường liên hệ ngắn nhất giữa 2 nhân vật kèm nhãn nguồn gốc |
-| | `story_map_relationships` | Đồ thị quan hệ nhân vật có nhãn **Provenance (`EXTRACTED` / `INFERRED` / `LEGACY`)** |
+| **Theo dõi Trạng thái Nhân vật** | `story_track_character_state` | Ghi nhận / truy vấn / lịch sử trạng thái (`action`: "log" / "query" / "history") — `state`: `{location, inventory, condition, status, knownSecrets, notes}`; **log là mutate-in-lock** (song song an toàn) |
+| | *(history mode)* | `story_track_character_state({ character, action: "history" })` trả về toàn bộ dòng thời gian biến động theo thứ tự tự nhiên (không còn tool riêng `get_character_timeline`) |
+| **Bối cảnh & Đồ thị Tri thức (Graph & Bible)** | `story_query_context` | Lấy context tối ưu ngân sách token; **Hỗ trợ `from` + `to`** tìm đường liên hệ ngắn nhất; **fuzzy matching v0.3.0**: "linh hon" ≡ "Linh Hồn", sai chính tả 1–2 ký tự vẫn resolve |
+| | `story_map_relationships` | Đồ thị quan hệ nhãn **Provenance (`EXTRACTED`/`INFERRED`/`LEGACY`)**; auto-scan + update thủ công đều mutate-in-lock |
 | | `story_extract_entities_to_bible` | Tự động trích xuất nhân vật/địa danh mới vào Story Bible, lọc nhiễu tần suất cao |
-| **Gài gắm & Manh mối (Chekhov's Gun)** | `story_log_setup` | Ghi nhận chi tiết gài gắm (Setup) |
+| **Gài gắm & Manh mối (Chekhov's Gun)** | `story_log_setup` | Ghi nhận chi tiết gài gắm (Setup) — mutate-in-lock |
 | | `story_log_payoff` | Ghi nhận chi tiết hé lộ/thu hồi (Payoff) |
 | | `story_list_unfired` | Liệt kê các Setup chưa có Payoff |
 | **Kiểm soát Cốt truyện & Timeline** | `story_detect_timeline_conflicts` | Kiểm tra mâu thuẫn 2 chiều (ngày tuyệt đối & thứ tự tương đối), tuyến song song & phân thân nhân vật; Xuất Mermaid sạch |
@@ -101,13 +108,15 @@ Kỹ năng này biến AI thành một **Đồng Tác Giả & Biên Tập Viên 
 | | `story_resolve_plot_hole` | Đánh dấu đã khắc phục lỗ hổng |
 | **Phân tích Chất lượng (Analytics)** | `story_analyze_pacing` | Phân tích nhịp độ (Action / Dialogue / Description), tension curve chính xác theo cụm từ khóa |
 | | `story_analyze_voice` | Đánh giá giọng văn, tone, POV & drift so với style guide |
-| | `story_analyze_sentiment` | Phân tích cảm xúc, polarity, emotional arc & tone drift; Nhận diện teencode, tiếng Việt mạng & emoticon |
+| | `story_analyze_sentiment` | Phân tích cảm xúc, polarity, emotional arc & tone drift; method `lexicon-v2` (teencode, tiếng Việt mạng, emoticon, phủ định/tăng cường) + **cảnh báo Coverage < 5%** khi văn nhiều ẩn dụ |
 | | `story_track_emotion` | Phân tích nhanh cảm xúc/tone của đoạn văn bản ngắn độc lập |
 | | `story_stats` | Thống kê từ vựng, độ dài, **Phát hiện Top 5 God-Nodes (Nhân vật trung tâm)** |
 | **Xuất bản, Dashboard & Dự án** | `story_generate_dashboard` | Tạo HTML Visual Dashboard tương tác trực quan với escaping an toàn XSS |
-| | `story_export` | Xuất bản thảo ra Markdown, HTML, EPUB, DOCX chuẩn typography |
+| | `story_export` | Xuất Markdown, HTML, EPUB3 (`dcterms:modified`, CSS justify/hyphens/ngắt trang section) hoặc DOCX (page break giữa chương, docProps đầy đủ, style Normal justify) |
 | | `story_generate_writing_prompt` | Tạo prompt gợi ý phân cảnh tối ưu dựa trên lore & style guide |
-| | `story_set_project` / `story_init` | Thiết lập và khởi tạo dự án tiểu thuyết (hỗ trợ phân biệt dự án code vs novel) |
+| **Quản lý Dự án (v0.3.0)** | `story_set_project` | Thiết lập/chuyển đổi dự án đích (chặn dự án code, phân biệt novel) — instance registry được tái sử dụng |
+| | `story_list_projects` | Liệt kê mọi dự án đã mở trong phiên (🟢 active / ⚪ không active + trạng thái khởi tạo) |
+| | `story_init` | Khởi tạo dự án tiểu thuyết với template theo thể loại |
 | **Cứu hộ & An toàn (Rescue Suite)** | `story_scan_messy_project` | Quét thư mục không chuẩn, phát hiện encoding (UTF-8, Windows-1252, ISO-8859-1) |
 | | `story_auto_refactor_structure` | Tự động tái cấu trúc thư mục dự án theo chuẩn với chế độ dry-run |
 | | `story_snapshot` / `story_rollback` | Tạo bản sao lưu 9 file metadata, làm mới cache `.cbm` và khôi phục dự án an toàn |
@@ -146,13 +155,15 @@ Khi xuất biểu đồ trực quan hóa (quan hệ nhân vật, tiến trình s
 
 1. **Bước 1 & 2 - Tra cứu bối cảnh, đường đi quan hệ & Trạng thái nhân vật:**
    ```json
-   // Tìm thông tin chung
+   // (Nếu có nhiều tác phẩm) Kiểm tra dự án đang mở
+   story_list_projects({})
+   // Tìm thông tin chung — thiếu dấu / sai tả nhẹ vẫn khớp (v0.3.0 fuzzy)
    story_query_context({ "query": "quán rượu Hắc Phong Lâm Phong" })
    // Tìm liên kết ngắn nhất nếu Lâm Phong cần móc nối với bang chủ Hắc Phong qua người trung gian
    story_query_context({ "from": "Lâm Phong", "to": "Bang Chủ Hắc Phong", "query": "mối quan hệ" })
-   // Kiểm tra trạng thái và gài gắm
-   story_get_character_timeline({ "characterId": "lam-phong", "arc": "arc_01" })
-   story_map_relationships({ "characterId": "lam-phong" })
+   // Kiểm tra lịch sử trạng thái & gài gắm
+   story_track_character_state({ "character": "Lâm Phong", "action": "history" })
+   story_query_context({ "query": "Lâm Phong quan hệ phe phái" })
    story_list_unfired({})
    ```
 2. **Bước 3 - Lập dàn ý phân cảnh:**
@@ -167,17 +178,20 @@ Khi xuất biểu đồ trực quan hóa (quan hệ nhân vật, tiến trình s
      "content": "# Chương 5: Cuộc Chạm Trán Tại Quán Rượu Hắc Phong\n\n..."
    })
    ```
-4. **Bước 5 - Cập nhật trạng thái nhân vật:**
+4. **Bước 5 - Cập nhật trạng thái nhân vật (schema thật: `state` là snapshot trọn bộ, không phải delta):**
    ```json
    story_track_character_state({
-     "characterId": "lam-phong",
-     "arc": "arc_01",
-     "chapter": "ch_005",
-     "location": "Quán rượu Hắc Phong",
-     "status": "active",
-     "health": "Bị thương nhẹ ở bả vai trái",
-     "psychology": "Căng thẳng, cảnh giác cao độ sau vụ tập kích",
-     "inventoryDelta": { "lost": ["Túi lương khô"], "acquired": ["Tấm lệnh bài Hắc Phong"] }
+     "character": "Lâm Phong",
+     "chapter": "arc_01/ch_005",
+     "action": "log",
+     "state": {
+       "location": "Quán rượu Hắc Phong",
+       "status": "injured",
+       "condition": "Bị thương nhẹ ở bả vai trái",
+       "notes": "Căng thẳng, cảnh giác cao độ sau vụ tập kích",
+       "inventory": ["Thanh đoản kiếm", "Tấm lệnh bài Hắc Phong"],
+       "knownSecrets": ["Dấu vết gia tộc trong hầm quán"]
+     }
    })
    ```
 5. **Bước 6 - Kiểm định chất lượng & Thống kê mạng lưới:**

@@ -18,7 +18,7 @@ Kỹ năng này biến AI thành **Kiến trúc sư Story Bible & Quản lý tr�
 
 2. **DYNAMIC STATE TRACKING (Theo dõi biến động nhân vật theo thời gian):**
    - Nhân vật không tĩnh tại: qua mỗi chương, họ chịu thương tật, thay đổi tâm lý, học kỹ năng mới, hoặc thu thập/mất đi vật phẩm.
-   - Dùng `story_track_character_state` để ghi nhận các mốc biến động và `story_get_character_timeline` để xem lại toàn bộ hành trình tiến hóa của nhân vật.
+   - Dùng `story_track_character_state` với `action: "log"` để ghi nhận các mốc biến động và `action: "history"` để xem lại toàn bộ hành trình tiến hóa của nhân vật.
 
 3. **FRONTMATTER CHUẨN (Structured YAML):**
    - Mỗi file Bible bắt buộc có YAML frontmatter: `name`, `role`/`type`, `aliases`, và các trường tùy chọn (`goals`, `appearance`, `abilities`...).
@@ -44,7 +44,8 @@ Kỹ năng này biến AI thành **Kiến trúc sư Story Bible & Quản lý tr�
 - Bổ sung nội dung chi tiết vào hồ sơ: bối cảnh, tính cách, mục tiêu, bí danh (aliases).
 
 ### Bước 4: Cập nhật dòng trạng thái nhân vật (State Logging)
-- Sau mỗi chương quan trọng, gọi `story_track_character_state` để ghi nhận: vị trí (`location`), sức khỏe/chấn thương (`health`), trạng thái tâm lý (`psychology`), thay đổi túi đồ (`inventoryDelta`).
+- Sau mỗi chương quan trọng, gọi `story_track_character_state({ character, chapter, action: "log", state: { location, condition, status, inventory, knownSecrets, notes } })`.
+- Lưu ý: `state` là **snapshot trọn bộ** tại mốc chương (không phải delta) — liệt kê toàn bộ vật phẩm đang mang theo, toàn bộ bí mật đã biết.
 
 ### Bước 5: Đồng bộ quan hệ & kiểm chứng (Verify)
 - Gọi `story_map_relationships` để cập nhật đồ thị quan hệ nhân vật.
@@ -57,13 +58,15 @@ Kỹ năng này biến AI thành **Kiến trúc sư Story Bible & Quản lý tr�
 
 | Mục đích | Tool MCP | Tham số chính |
 | :--- | :--- | :--- |
-| Ghi nhận biến động trạng thái nhân vật | `story_track_character_state` | `characterId`, `arc`, `chapter`, `location`, `health`, `psychology`, `inventoryDelta` |
-| Truy vấn dòng thời gian nhân vật | `story_get_character_timeline` | `characterId`, `arc` |
+| Ghi nhận biến động trạng thái | `story_track_character_state` | `character`, `chapter`, `action: "log"`, `state: {location, inventory, condition, status, knownSecrets, notes}` |
+| Truy vấn lịch sử & trạng thái gần nhất | `story_track_character_state` | `character`, `action: "query"` / `"history"`, `chapter` (tuỳ chọn để lọc mốc) |
 | Trích xuất thực thể từ chương | `story_extract_entities_to_bible` | `arc`, `chapter`, `confirm` |
 | Đọc nhanh nội dung chương | `story_read_chapter` | `arc`, `chapter` |
-| Truy vấn hồ sơ (Knowledge Graph) | `story_query_context` | `query`, `budgetTokens`, `rebuildIndex` |
-| Quét quan hệ tự động | `story_map_relationships` | `minChapters`, `characterId` |
+| Truy vấn hồ sơ (Knowledge Graph) | `story_query_context` | `query` (fuzzy: không dấu/sai tả nhẹ vẫn khớp), `budgetTokens`, `rebuildIndex` |
+| Quét quan hệ tự động | `story_map_relationships` | `minChapters` (không truyền source/target) |
+| Xác nhận quan hệ thủ công | `story_map_relationships` | `source`, `target`, `type`, `description`, `chapter` |
 | Khởi tạo dự án | `story_init` | `name`, `genre`, `pov`, `tense` |
+| Xem dự án đã mở trong phiên | `story_list_projects` | *(không tham số)* — v0.3.0 |
 | Thống kê thực thể | `story_stats` | *(không tham số)* |
 
 ---
@@ -72,22 +75,25 @@ Kỹ năng này biến AI thành **Kiến trúc sư Story Bible & Quản lý tr�
 
 **Yêu cầu:** "Ghi nhận trạng thái mới của Lâm Phong sau trận chiến Chương 5 và kiểm tra timeline của nhân vật."
 
-1. **Bước 1 — Ghi nhận trạng thái:**
+1. **Bước 1 — Ghi nhận trạng thái (mutate-in-lock v0.3.0 — song song an toàn):**
    ```json
    story_track_character_state({
-     "characterId": "lam-phong",
-     "arc": "arc_01",
-     "chapter": "ch_005",
-     "location": "Mật Thất Rừng Đen",
-     "status": "injured",
-     "health": "Nhiễm độc nhẹ từ châm độc của thích khách",
-     "psychology": "Quyết tâm tìm ra kẻ chủ mưu sau lưng gia tộc",
-     "inventoryDelta": { "acquired": ["Mảnh bản đồ cổ"], "lost": [] }
+     "character": "Lâm Phong",
+     "chapter": "arc_01/ch_005",
+     "action": "log",
+     "state": {
+       "location": "Mật Thất Rừng Đen",
+       "status": "injured",
+       "condition": "Nhiễm độc nhẹ từ châm độc của thích khách",
+       "notes": "Quyết tâm tìm ra kẻ chủ mưu sau lưng gia tộc",
+       "inventory": ["Thanh đoản kiếm", "Mảnh bản đồ cổ"],
+       "knownSecrets": ["Thích khách trong rừng đen"]
+     }
    })
    ```
 
 2. **Bước 2 — Tra cứu lịch sử biến động trạng thái:**
    ```json
-   story_get_character_timeline({ "characterId": "lam-phong" })
+   story_track_character_state({ "character": "Lâm Phong", "action": "history" })
    ```
    → Hiển thị dòng thời gian từ ch_001 (khởi đầu bình thường) → ch_004 (bị thương nhẹ) → ch_005 (nhiễm độc và có bản đồ cổ).

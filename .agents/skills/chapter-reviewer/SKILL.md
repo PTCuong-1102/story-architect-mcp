@@ -6,7 +6,7 @@ description: >-
 
 # Chapter Reviewer — Beta-reader & biên tập viên độc lập
 
-Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc lập** khó tính nhưng công bằng: đọc trực tiếp chương truyện bằng `story_read_chapter`, đối chiếu với dữ liệu Bible và dòng trạng thái nhân vật (`story_get_character_timeline`), phân tích nhịp độ và cảm xúc, và trả về một **báo cáo feedback có cấu trúc** hoàn chỉnh.
+Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc lập** khó tính nhưng công bằng: đọc trực tiếp chương truyện bằng `story_read_chapter`, đối chiếu với dữ liệu Bible và dòng trạng thái nhân vật (`story_track_character_state` với `action: "history"`), phân tích nhịp độ và cảm xúc, và trả về một **báo cáo feedback có cấu trúc** hoàn chỉnh.
 
 ---
 
@@ -22,7 +22,8 @@ Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc 
    - **Optional** (trau chuốt): Từ ngữ trùng lặp, câu quá dài, cấu trúc câu chưa nhịp nhàng.
 
 3. **ĐỐI CHIẾU TRẠNG THÁI NHÂN VẬT & BIBLE:**
-   - Đảm bảo hành động, thể lực và tâm lý của nhân vật ăn khớp với lịch sử biến động trong `story_get_character_timeline`.
+   - Đảm bảo hành động, thể lực và tâm lý của nhân vật ăn khớp với lịch sử biến động trong `story_track_character_state` (`action: "history"`).
+   - Tôn trọng nhãn phương pháp của engine phân tích: sentiment là `lexicon-v2` (thuần từ vựng) — khi output cảnh báo **Coverage < 5%** (văn giàu ẩn dụ/nghị đảo), hãy hạ mức tự tin của con số và rà bằng đọc trực tiếp trước khi đưa nhận xét cảm xúc.
 
 4. **GHI NHẬN LỖI VÀO HỆ THỐNG (Log findings):**
    - Nếu phát hiện mâu thuẫn thật sự → ghi nhận vào `story_log_plot_hole` (không tự ý ghi đè bản thảo).
@@ -40,8 +41,8 @@ Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc 
 - Gọi `story_analyze_sentiment` với `arc` + `chapter`: phân tích polarity, emotional arc và tone drift.
 
 ### Bước 3: Đối chiếu liên tục & trạng thái nhân vật (Continuity & State check)
-- Gọi `story_get_character_timeline` cho các nhân vật chính xuất hiện trong chương.
-- Gọi `story_query_context` để đối chiếu hồ sơ Bible.
+- Gọi `story_track_character_state({ character: "...", action: "history" })` cho các nhân vật chính xuất hiện trong chương.
+- Gọi `story_query_context` để đối chiếu hồ sơ Bible (tên thiếu dấu/sai tả nhẹ vẫn khớp nhờ fuzzy v0.3.0).
 - Gọi `story_list_unfired` để kiểm tra các cơ hội giải gỡ gài cắm (foreshadowing).
 
 ### Bước 4: Viết báo cáo feedback có cấu trúc (Structured Report)
@@ -64,11 +65,13 @@ Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc 
 | Đọc nội dung chương | `story_read_chapter` | `arc`, `chapter` |
 | Đo nhịp độ chương | `story_analyze_pacing` | `arc`, `chapter` |
 | Đo giọng văn & tone | `story_analyze_voice` | `arc`, `chapter` |
-| Phân tích đường cong cảm xúc | `story_analyze_sentiment` | `arc`, `chapter`, `windowSize` |
-| Kiểm tra trạng thái nhân vật | `story_get_character_timeline` | `characterId`, `arc` |
-| Đối chiếu hồ sơ Bible | `story_query_context` | `query`, `budgetTokens` |
+| Phân tích đường cong cảm xúc | `story_analyze_sentiment` | `arc`, `chapter`, `windowSize` — method `lexicon-v2` + ⚠️ Coverage < 5% |
+| Kiểm tra lịch sử & trạng thái nhân vật | `story_track_character_state` | `character`, `action: "history"` / `"query"`, `chapter` |
+| Ghi nhận biến động trạng thái | `story_track_character_state` | `character`, `chapter`, `action: "log"`, `state` |
+| Đối chiếu hồ sơ Bible | `story_query_context` | `query` (fuzzy), `budgetTokens` |
 | Kiểm tra gài cắm chưa giải | `story_list_unfired` | *(không tham số)* |
-| Ghi nhận mâu thuẫn | `story_log_plot_hole` | `title`, `description`, `severity`, `chapters` |
+| Ghi nhận mâu thuẫn | `story_log_plot_hole` | `title`, `description`, `severity`, `chapters` (mutate-in-lock) |
+| Xem dự án đang mở | `story_list_projects` | *(không tham số)* — v0.3.0 |
 
 ---
 
@@ -80,6 +83,6 @@ Kỹ năng này biến AI thành một **beta-reader / biên tập viên độc 
 story_read_chapter({ "arc": "arc_01", "chapter": "ch_003" })
 story_analyze_pacing({ "arc": "arc_01", "chapter": "ch_003" })
 story_analyze_sentiment({ "arc": "arc_01", "chapter": "ch_003" })
-story_get_character_timeline({ "characterId": "lam-phong" })
+story_track_character_state({ "character": "Lâm Phong", "action": "history" })
 story_list_unfired({})
 ```

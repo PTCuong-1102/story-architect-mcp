@@ -15,6 +15,7 @@ Kỹ năng này biến AI thành **Quản lý viên manh mối (Foreshadowing Ma
 1. **MỖI SETUP LÀ MỘT LỜI HỨA (Every setup is a promise):**
    - Mọi chi tiết cài cắm (`story_log_setup`) là một lời hứa với độc giả — phải được trả bằng payoff thỏa đáng.
    - Không để lọt setup mà không có kế hoạch thu hồi.
+   - `story_log_setup` / `story_log_payoff` là **mutate-in-lock v0.3.0**: ghi theo read-modify-write nguyên khối trong khoá file — chạy song song với tool ghi khác (log plot hole, track state...) không bao giờ mất mũi ghi của nhau.
 
 2. **TRƯỚC MỖI CHƯƠNG: KIỂM TRA SÚNG CHƯA BẮN (Check unfired first):**
    - Luôn gọi `story_list_unfired` trước khi viết một chương để biết manh mối nào có thể giải gỡ tại đây.
@@ -56,7 +57,8 @@ Kỹ năng này biến AI thành **Quản lý viên manh mối (Foreshadowing Ma
 | Trực quan hóa trên Dashboard | `story_generate_dashboard` | `outputPath`, `autoOpen` |
 | Đọc tra cứu chương bản thảo | `story_read_chapter` | `arc`, `chapter` |
 | Soạn prompt viết cảnh payoff | `story_generate_writing_prompt` | `arc`, `chapter`, `strategy` |
-| Lấy bối cảnh manh mối | `story_query_context` | `query`, `budgetTokens` |
+| Lấy bối cảnh manh mối | `story_query_context` | `query` (fuzzy: không dấu/sai tả nhẹ vẫn khớp), `budgetTokens` |
+| Xem dự án đang mở trong phiên | `story_list_projects` | *(không tham số)* — v0.3.0 |
 
 ---
 

@@ -30,7 +30,7 @@ Kỹ năng này biến AI thành **Chuyên gia cứu hộ và tái cấu trúc**
 ## 📋 WORKFLOW CỨU HỘ DỰ ÁN (5 BƯỚC)
 
 ### Bước 1: Thiết lập dự án đích (Project Setup)
-- Gọi `story_set_project` với `projectPath` trỏ tới thư mục cần cứu hộ (bật `force: true` nếu thư mục chưa theo chuẩn).
+- Gọi `story_set_project` với `projectPath` trỏ tới thư mục cần cứu hộ (bật `force: true` nếu thư mục chưa theo chuẩn); có nhiều dự án đang mở thì kiểm tra bằng `story_list_projects` (v0.3.0) trước.
 - Nếu thư mục mới hoàn toàn, dùng `story_init` để tạo cấu trúc chuẩn.
 
 ### Bước 2: Quét & phát hiện sự cố toàn diện (Comprehensive Scan)
@@ -64,6 +64,7 @@ Kỹ năng này biến AI thành **Chuyên gia cứu hộ và tái cấu trúc**
 | Đọc kiểm tra chương sau cứu hộ | `story_read_chapter` | `arc`, `chapter` |
 | Ghi lại nội dung chương an toàn | `story_write_chapter` | `arc`, `chapter`, `content`, `title` |
 | Thiết lập thư mục làm việc | `story_set_project` | `projectPath`, `force` |
+| Xem dự án đang mở trong phiên | `story_list_projects` | *(không tham số)* — v0.3.0 |
 | Kiểm tra trạng thái dự án | `story_get_project_info` / `story_stats` | *(không tham số)* |
 
 ---
